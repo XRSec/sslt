@@ -47,7 +47,7 @@ func main() {
 	}
 	if version {
 		color.Green(" Verdion: %v BuildTime: %v", versions, buildTime)
-		color.Green(" Author: %v CommitId: %v", author, commitId)
+		color.Green(" Author: %v CommitId:  %v", author, commitId)
 		os.Exit(0)
 	}
 	// get our ca and server certificate
