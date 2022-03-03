@@ -47,11 +47,12 @@
       |       |  |         |
  \___.'  \___.'  /---/     /
  ----------------------
+flag needs an argument: -h
 Usage of sslt:
   -c string
     	Specified Country (default "US")
   -h string
-    	Specified domain name (default "127.0.0.1")
+    	Specified domain name (default "baidu.com")
   -help
     	Display help information
   -r string
@@ -66,6 +67,7 @@ Usage of sslt:
     	Specified Server CommonName (default "GTS CA 1C3")
   -so string
     	Specified Server Organization (default "Google Trust Services LLC")
+  -v	sslt version
 ```
 
 ## 😊 Thanks 

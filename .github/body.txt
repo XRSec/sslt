@@ -41,23 +41,25 @@
       |       |  |         |
  \___.'  \___.'  /---/     /
  ----------------------
+flag needs an argument: -h
 Usage of sslt:
   -c string
-    	Specified Country (default "US")
+      Specified Country (default "US")
   -h string
-    	Specified domain name (default "127.0.0.1")
+      Specified domain name (default "baidu.com")
   -help
-    	Display help information
+      Display help information
   -r string
-    	Import Root_CA (default "default")
+      Import Root_CA (default "default")
   -rc string
-    	Specified Root CommonName (default "GTS Root R1")
+      Specified Root CommonName (default "GTS Root R1")
   -rk string
-    	Import Root_CA Key (default "default")
+      Import Root_CA Key (default "default")
   -ro string
-    	Specified Root Organization (default "Google Trust Services LLC")
+      Specified Root Organization (default "Google Trust Services LLC")
   -sc string
-    	Specified Server CommonName (default "GTS CA 1C3")
+      Specified Server CommonName (default "GTS CA 1C3")
   -so string
-    	Specified Server Organization (default "Google Trust Services LLC")
+      Specified Server Organization (default "Google Trust Services LLC")
+  -v  sslt version
 ```
