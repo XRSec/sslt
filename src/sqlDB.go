@@ -6,8 +6,6 @@ import (
 	"gorm.io/gorm"
 	"strconv"
 	"strings"
-
-	// "gorm.io/gorm/logger"
 	//"gorm.io/gorm/logger"
 	"os"
 	"time"
@@ -52,7 +50,7 @@ func init() {
 	}
 	//color.Red("[*] Debug mode is on")
 	db, err = gorm.Open(sqlite.Open("sslt/sslt.db"), &gorm.Config{
-		// Logger: logger.Default.LogMode(logger.Info),
+		//Logger: logger.Default.LogMode(logger.Info),
 	})
 	CheckErr(err)
 }

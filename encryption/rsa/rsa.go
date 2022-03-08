@@ -71,10 +71,10 @@ func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Confi
 
 	// write ca to sql & file
 	// 如果存在证书则导出
-	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(ca.Issuer.CommonName, caCommonName, host, protocol); caStatus == false {
+	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(caCommonName, caCommonName, host, protocol); caStatus == false {
 		//certPEM = new(bytes.Buffer)
 	} else {
-		caPEMSQL, caPrivyKeyPEMSQL = CaAdd(ca.Issuer.CommonName, caCommonName, host, protocol, ca.NotAfter.Format("2006-01-02 15:04:05"), caPEM, caPrivyKeyPEM)
+		caPEMSQL, caPrivyKeyPEMSQL = CaAdd(caCommonName, caCommonName, host, protocol, ca.NotAfter.Format("2006-01-02 15:04:05"), caPEM, caPrivyKeyPEM)
 	}
 	caPEM = bytes.NewBuffer([]byte(caPEMSQL))
 	caPrivyKeyPEM = bytes.NewBuffer([]byte(caPrivyKeyPEMSQL))

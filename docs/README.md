@@ -76,6 +76,48 @@ Usage of sslt:
  -------------------------------
 ```
 
+## Task
+- [ ] Api
+- [ ] Gli web
+- [x] Import Certificate
+- [x] Save to sqlite3
+- [x] Generate a certificate
+
+## Architecture
+
+### All
+
+
+```mermaid
+flowchart LR
+    Main((Main))-->Choice{Choice}-->Import{Import}-->Sqlite3[(Sqlite3)]-->Import{Import}-->End>end];
+    Choice{Choice}-.-Query{Query}-.-Generate[/Generate\]-.-Sqlite3[(Sqlite3)]-.-Generate[/Generate\]-.-Query{Query}-.-Verify>Verify]-.-Write>Write]-.-End>end];
+    Choice{Choice}==>Query{Query}==>Sqlite3[(Sqlite3)]==>Export[Export]==>Query{Query}==>Verify>Verify]==>Write>Write]==>End>end]
+```
+
+### Import
+
+
+```mermaid
+flowchart LR
+    Main((Main))-->Choice{Choice}-->Import{Import}--yes-->Sqlite3[(Sqlite3)]-->Import{Import}-->End>end];
+```
+
+### Query
+
+
+```mermaid
+flowchart LR
+    Main((Main))-.->Choice{Choice}-.-Query{Query}-.->Sqlite3[(Sqlite3)]-.no.->Generate[/Generate\]-.->Sqlite3[(Sqlite3)]-.->Query{Query}-.->Verify>Verify]-.->Write>Write]-.->End>end];
+```
+
+
+```mermaid
+flowchart LR
+    Main((Main))-.->Choice{Choice}-.-Query{Query}-.->Sqlite3[(Sqlite3)]-.yes.-Query{Query}-.->Verify>Verify]-.->Write>Write]-.->End>end];
+```
+
+
 ## 😊 Thanks
 
 \[ [shaneutt](https://gist.github.com/shaneutt/5e1995295cff6721c89a71d13a71c251) ]  \[  [AndroidOL](https://post.m.smzdm.com/p/715145/) ]  \[ [I3estD4rkKn1ght](https://github.com/I3estD4rkKn1ght) ]
