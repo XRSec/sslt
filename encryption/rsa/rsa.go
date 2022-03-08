@@ -187,9 +187,14 @@ func ImportQuire(tableName, commonName, host, protocol, data string, certificate
 
 func ImportCert(caPEMFILE, caPrivyKeyPEMFILE string) {
 	certificatePEM, err := ioutil.ReadFile(caPEMFILE)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(errors.New("找不到文件: " + caPEMFILE))
+	}
+
 	certificatePrivyKeyPEM, err := ioutil.ReadFile(caPrivyKeyPEMFILE)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(errors.New("找不到文件: " + caPrivyKeyPEMFILE))
+	}
 	var ca, caErr = tls.X509KeyPair(certificatePEM, certificatePrivyKeyPEM)
 	CheckErr(caErr)
 	color.Red(" [ 证书文件存在! ]")
