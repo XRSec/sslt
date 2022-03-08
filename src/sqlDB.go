@@ -5,6 +5,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"strconv"
+	"strings"
 
 	// "gorm.io/gorm/logger"
 	//"gorm.io/gorm/logger"
@@ -62,6 +63,8 @@ func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKey
 	//	return CaPEMSQL, CaPrivyKeyPEMSQL
 	//}
 	// 不存在则创建
+	tableName = strings.Replace(tableName, " ", "_", -1)
+	commonname = strings.Replace(commonname, " ", "_", -1)
 	err := db.Table(tableName).AutoMigrate(&Product{})
 	CheckErr(err)
 	db.Table(tableName).Create(&Product{
@@ -81,6 +84,8 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 		Return false if tables/certificates exist; 'generate' if not
 		SqliteMaster Inquire tableName
 	*/
+	tableName = strings.Replace(tableName, " ", "_", -1)
+	commonname = strings.Replace(commonname, " ", "_", -1)
 	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name == tableName {
 		Notice(" 查询数据库 表名:    ", "["+tableName+"] 存在!")
 		if db.Select("*").Table(tableName).Where("common_name = ? AND host = ? AND protocol = ?", commonname, host, protocol).Scan(&certs); certs.CommonName == commonname && certs.ID != 0 {
