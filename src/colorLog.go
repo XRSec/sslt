@@ -2,18 +2,28 @@ package src
 
 import (
 	"github.com/fatih/color"
-	"os"
 	"path"
 	"runtime"
+	"strconv"
 	"time"
 )
 
-//var (
-//	notice  = color.New(color.FgBlue).PrintfFunc()
-//	warning = color.New(color.FgYellow).PrintfFunc()
-//	errors  = color.New(color.FgRed).PrintfFunc()
-//	succee  = color.New(color.FgGreen).PrintfFunc()
-//)
+var (
+	Errors string
+	//	notice  = color.New(color.FgBlue).PrintfFunc()
+	//	warning = color.New(color.FgYellow).PrintfFunc()
+	//	errors  = color.New(color.FgRed).PrintfFunc()
+	//	succee  = color.New(color.FgGreen).PrintfFunc()
+)
+
+func HappyLogo() {
+	color.Green("\033[H\033[2J -------------------------------\n")
+	color.Cyan("   _____   _____  .      _______")
+	color.Blue("  (       (      /     '   /   ")
+	color.Red("   `--.    `--.  |         |   ")
+	color.Magenta("      |       |  |         |   ")
+	color.Yellow(" \\___.'  \\___.'  /---/     /   \n")
+}
 
 func CheckErr(err error) {
 	if err != nil {
@@ -22,10 +32,28 @@ func CheckErr(err error) {
 		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05"))
 		color.New(color.FgGreen).PrintfFunc()("%v] %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
 		color.Yellow(" %v", err)
-		os.Exit(0)
+		Errors += "[sslt " + time.Now().Format("15:04:05") + "] " + path.Ext(runtime.FuncForPC(pc).Name())[1:] + " " + path.Base(file) + ":" + strconv.Itoa(line) + " " + err.Error() + "\n"
 	}
+}
+
+// ErrorS 返回所有的错误信息
+func ErrorS() string {
+	return Errors
 }
 func Notice(noticeTXT, resultTXT string) {
 	color.New(color.FgBlue).PrintfFunc()(" %v", noticeTXT)
 	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
+	Errors += noticeTXT + resultTXT + "\n"
+}
+
+func Error(noticeTXT, resultTXT string) {
+	color.New(color.FgYellow).PrintfFunc()(" %v", noticeTXT)
+	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
+	Errors += noticeTXT + resultTXT + "\n"
+}
+
+func Warning(noticeTXT, resultTXT string) {
+	color.New(color.FgRed).PrintfFunc()(" %v", noticeTXT)
+	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
+	Errors += noticeTXT + resultTXT + "\n"
 }

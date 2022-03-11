@@ -1,58 +1,226 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
-	"github.com/fatih/color"
+	"fmt"
 	"net"
-	"os"
-	"sslt/encryption/rsa"
+	"sslt/encryption/x509"
+
+	"github.com/fatih/color"
+	"github.com/gin-gonic/gin"
+
 	//"sslt/encryption/sm2"
-	//"github.com/gin-gonic/gin"
 	. "sslt/src"
 )
 
 var (
-	r, rk, ro, rc, s, sk, so, sc, c, h, p, buildTime, commitId, version, author string
+	r, rk, rc, ro, s, sk, sc, so, c, h, p, buildTime, commitId, version, author string
 	help, v                                                                     bool
 )
 
+type Import struct {
+	r  string
+	rk string
+	s  string
+	sk string
+}
+type New struct {
+	ro string
+	rc string
+	so string
+	sc string
+	c  string
+	h  string
+	p  string
+}
+
 func init() {
-	happyLogo()
-	//flag.StringVar(&r, "r", "default", "Import CA")
-	//flag.StringVar(&rk, "rk", "default", "Import CA Key")
-	//flag.StringVar(&s, "s", "default", "Import Server")
-	//flag.StringVar(&sk, "sk", "default", "Import Server Key")
-	flag.StringVar(&r, "r", "sslt/ca.pem", "Import CA")
-	flag.StringVar(&s, "s", "sslt/server.pem", "Import Cert CA")
-	flag.StringVar(&rk, "rk", "sslt/ca.key.pe", "Import CA Key")
-	flag.StringVar(&sk, "sk", "sslt/server.key.pe", "Import Cert CA Key")
-	flag.StringVar(&ro, "ro", "Google Trust Services LLC", "Specified Root Organization")
-	flag.StringVar(&rc, "rc", "GTS Root R1", "Specified Root CommonName")
-	flag.StringVar(&so, "so", "Google Trust Services LLC", "Specified Server Organization")
-	flag.StringVar(&sc, "sc", "GTS CA 1C3", "Specified Server CommonName")
-	flag.StringVar(&c, "c", "US", "Specified Country")
-	flag.StringVar(&h, "h", "localhost", "Specified domain name")
-	flag.StringVar(&p, "p", "rsa", "Specified encryption protocol")
-	flag.BoolVar(&help, "help", false, "Display help information")
-	flag.BoolVar(&v, "v", false, "sslt version")
+	HappyLogo()
 }
 
-func happyLogo() {
-	color.Green("\033[H\033[2J -------------------------------\n")
-	color.Cyan("   _____   _____  .      _______")
-	color.Blue("  (       (      /     '   /   ")
-	color.Red("   `--.    `--.  |         |   ")
-	color.Magenta("      |       |  |         |   ")
-	color.Yellow(" \\___.'  \\___.'  /---/     /   \n")
-}
-
-func main() {
+func Server(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) {
 	/*
 		检测用户输入并判断
 			 证书协议
 				生成还是导入证书
 					是否存在已有证书
 	*/
+	// 判断证书协议
+	if protocol == "x509" {
+		// Generate CA
+		var (
+			CertTLSConf, CaTLSConf *tls.Config
+		)
+		CaTLSConf, CertTLSConf = x509.Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol)
+		// where The Test Was Successful
+		// Verify (ca cert)certificate is ok?
+		if net.ParseIP(host) == nil {
+			x509.VerifyDomainCa(CaTLSConf, CertTLSConf, host)
+		} else {
+			// TODO 现在需要设计 验证 跟证书 和 服务证书 之间是否存在证书链接
+			Notice(" 暂时没有IP证书的验证方式,请尝试上传服务器验证", "")
+		}
+	}
+}
+
+func Api() {
+	req := gin.Default()
+	req.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"Message": "Home",
+		})
+	})
+	req.GET("/list", func(c *gin.Context) {
+		caCerts := QuireAll()
+		c.JSON(200, gin.H{
+			"Message": "List All Certificates",
+			caCerts:   caCerts,
+		})
+	})
+	req.POST("/new", func(context *gin.Context) {
+		err := context.ShouldBind(&New{})
+		if err != nil {
+			context.JSON(200, gin.H{
+				"Message": "生成证书报错了! 请检查参数是否正确",
+			})
+		} else {
+			rc = context.DefaultPostForm("rc", "GTS Root R1")
+			ro = context.DefaultPostForm("ro", "Google Trust Services LLC")
+			sc = context.DefaultPostForm("sc", "GTS CA 1C3")
+			so = context.DefaultPostForm("so", "Google Trust Services LLC")
+			c = context.DefaultPostForm("c", "US")
+			h = context.DefaultPostForm("h", "localhost")
+			p = context.DefaultPostForm("p", "x509")
+			var message = "证书正在生成! 等待证书导出..."
+			if rc == "GTS Root R1" || ro == "Google Trust Services LLC" || sc == "GTS CA 1C3" || so == "Google Trust Services LLC" || c == "US" || h == "localhost" || p == "x509" {
+				message = "部分参数为默认值, 证书正在生成! 等待证书导出..."
+			}
+			if p == "x509" {
+				// Generate CA Cert
+				Errors = ""
+				Server(rc, ro, sc, so, c, h, p)
+			}
+			context.JSON(200, gin.H{
+				"Message": message,
+				"Result":  ErrorS(),
+				"Arguments": gin.H{
+					"rc": rc,
+					"ro": ro,
+					"sc": sc,
+					"so": so,
+					"c":  c,
+					"h":  h,
+					"p":  p,
+				}})
+		}
+	})
+	req.GET("/new", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"Message": "Generate a new certificate",
+			"Arguments": gin.H{
+				"-X":       "POST",
+				"--header": "Authorization Bearer TOKEN",
+				"--data": gin.H{
+					"rc": "Specified Root CommonName",
+					"ro": "Specified Root Organization",
+					"sc": "Specified Server CommonName",
+					"so": "Specified Server Organization",
+					"c":  "Specified Country",
+					"h":  "Specified domain name",
+					"p":  "Specified encryption protocol",
+				}}})
+	})
+	req.POST("/import", func(context *gin.Context) {
+		err := context.ShouldBind(&Import{})
+		if err != nil {
+			context.JSON(200, gin.H{
+				"Message": "导入证书报错了! 请检查参数是否正确",
+			})
+		} else {
+			r = context.DefaultPostForm("r", "default")
+			rk = context.DefaultPostForm("rk", "default")
+			s = context.DefaultPostForm("s", "default")
+			sk = context.DefaultPostForm("sk", "default")
+			var message = "证书正在导入! 等待数据库更新..."
+
+			if r != "default" || s != "default" {
+				if r != "default" && rk != "default" {
+					// IMPORT CA CERTIFICATE
+					message = "CA证书正在导入! 等待数据库更新..."
+					//defer recoverFullName()
+					Errors = ""
+					x509.ImportCert(r, rk)
+				}
+				if s != "default" && sk != "default" {
+					// IMPORT CERT CERTIFICATE
+					message = "SERVER证书正在导入! 等待数据库更新..."
+					//defer recovery()
+					x509.ImportCert(s, sk)
+				}
+				if (r != "default" && rk == "default") || (r == "default" && rk != "default") || (s != "default" && sk == "default") || (s == "default" && sk != "default") {
+					message = "导入证书报错了! 请检查参数是否正确"
+				}
+			} else {
+				message = "导入证书报错了! 请检查参数是否正确"
+			}
+			context.JSON(200, gin.H{
+				"Message": message,
+				"Result":  ErrorS(),
+				"Arguments": gin.H{
+					"r":  r,
+					"rk": rk,
+					"s":  s,
+					"sk": sk,
+				}})
+		}
+
+	})
+	req.GET("/import", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"Message": "Import a new certificate",
+			"Arguments": gin.H{
+				"-X":       "POST",
+				"--header": "Authorization Bearer TOKEN",
+				"--data": gin.H{
+					"req": "ca.crt_content",
+					"rk":  "ca.key.crt_content",
+					"s":   "server.crt_content",
+					"sk":  "server.key.crt_content",
+				}}})
+	})
+	req.GET("/help", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"Message": "Display help information",
+			"Arguments": gin.H{
+				"-X":       "POST",
+				"--header": "Authorization Bearer TOKEN",
+				"--data": gin.H{
+					"req":  "ca.crt_content",
+					"rk":   "ca.key.crt_content",
+					"s":    "server.crt_content",
+					"sk":   "server.key.crt_content",
+					"rc":   "Specified Root CommonName",
+					"ro":   "Specified Root Organization",
+					"sc":   "Specified Server CommonName",
+					"so":   "Specified Server Organization",
+					"c":    "Specified Country",
+					"h":    "Specified domain name",
+					"p":    "Specified encryption protocol",
+					"help": "Display help information",
+				}}})
+	})
+
+	//gin start
+	err := req.Run(":8081")
+	if err != nil {
+		CheckErr(err)
+		return
+	} // listen and serve on 0.0.0.0:8081
+	fmt.Println(r, rk, rc, ro, s, sk, sc, so, c, h, p)
+}
+
+func main() {
 	color.Green(" ----------------------     \n")
 	defer color.Green(" -------------------------------\n")
 	flag.Parse()
@@ -69,34 +237,7 @@ func main() {
 		Notice("CommitId:  ", commitId)
 		return
 	}
-
-	if p == "rsa" {
-		// Import CA
-		if r != "default" || s != "default" {
-			if r != "default" && rk != "default" {
-				// IMPORT CA CERTIFICATE
-				rsa.ImportCert(r, rk)
-			}
-			if s != "default" && sk != "default" {
-				// IMPORT CERT CERTIFICATE
-				rsa.ImportCert(s, sk)
-			}
-			if (r != "default" && rk == "default") || (r == "default" && rk != "default") || (s != "default" && sk == "default") || (s == "default" && sk != "default") {
-				Notice(" 没有找到证书文件(公钥或私钥缺失): ", "「CA: "+r+"」「CA KEY: "+rk+"」「CERT: "+s+"」「CERT KEY: "+sk+"」")
-			}
-			os.Exit(0)
-		} else {
-			// Generate CA
-			CaTLSConf, CertTLSConf := rsa.Setup(rc, ro, sc, so, c, h, p)
-			// wherr The Test Was Successful
-			// Verify (ca cert)certificate is ok?
-			if net.ParseIP(h) == nil {
-				rsa.VerifyDomainCa(CaTLSConf, CertTLSConf, h)
-			} else {
-				// TODO 现在需要设计 验证 跟证书 和 服务证书 之间是否存在证书链接
-				color.Blue(" 暂时没有IP证书的验证方式,请尝试上传服务器验证")
-			}
-		}
-	}
 	// << Start by identifying the functionality the user needs
+	// api
+	Api()
 }

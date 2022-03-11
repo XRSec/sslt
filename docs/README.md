@@ -14,26 +14,8 @@
 ### 0x01
 
 ```bash
-./sslt -c US -h="test.com 1.1.1.1 localhost" -sc="This is DNS"
-```
-
-### 0x02
-
-```bash
-./sslt -r=ca.pem  -rk=/home/ca.key.pem
-```
-
-### 0x03
-
-```bash
-./sslt -c US -h 1.1.1.1 -sc "证书的名字，方便记忆"
-```
-
-### 0x05
-
-```bash
-
-./sslt -c US -h test.com -rc "Root CommonName" -ro "Root OrganizationName" -sc "Server CommonName" -so "Server OrganizationName"
+./sslt
+# Port 8081
 ```
 
 ### help
@@ -78,45 +60,53 @@ Usage of sslt:
 
 ## Task
 - [ ] Api
-- [ ] Gli web
+  - [x] Web API
+    - [ ] List All Certificates
+      - [ ] Sqllite
+        - [ ] **TODO** QuireAll
+        - [x] CaInquire
+        - [x] CaAdd
+    - [x] Home
+    - [x] new
+    - [x] import
+    - [x] help
+  
+- [ ] Vue web
 - [x] Import Certificate
 - [x] Save to sqlite3
 - [x] Generate a certificate
 
 ## Architecture
 
-### All
+### /
+
+
+```mermaid
+graph LR
+    Main((Main))-->Api{Api}-->gin{gin}
+```
+
+### /import
 
 
 ```mermaid
 flowchart LR
-    Main((Main))-->Choice{Choice}-->Import{Import}-->Sqlite3[(Sqlite3)]-->Import{Import}-->End>end];
-    Choice{Choice}-.-Query{Query}-.-Generate[/Generate\]-.-Sqlite3[(Sqlite3)]-.-Generate[/Generate\]-.-Query{Query}-.-Verify>Verify]-.-Write>Write]-.-End>end];
-    Choice{Choice}==>Query{Query}==>Sqlite3[(Sqlite3)]==>Export[Export]==>Query{Query}==>Verify>Verify]==>Write>Write]==>End>end]
+    gin{gin}-->Import{Import}--yes-->Sqlite3[(Sqlite3)]-->Import{Import}-->gin{gin};
 ```
 
-### Import
+### /list
 
 
 ```mermaid
 flowchart LR
-    Main((Main))-->Choice{Choice}-->Import{Import}--yes-->Sqlite3[(Sqlite3)]-->Import{Import}-->End>end];
+    gin{gin}-->Sqlite3[(Sqlite3)]-->gin{gin};
 ```
 
-### Query
-
-
+### /new
 ```mermaid
 flowchart LR
-    Main((Main))-.->Choice{Choice}-.-Query{Query}-.->Sqlite3[(Sqlite3)]-.no.->Generate[/Generate\]-.->Sqlite3[(Sqlite3)]-.->Query{Query}-.->Verify>Verify]-.->Write>Write]-.->End>end];
+    gin{gin}-->Choice{Choice}-->Sqlite3[(Sqlite3)]-->gin{gin};
 ```
-
-
-```mermaid
-flowchart LR
-    Main((Main))-.->Choice{Choice}-.-Query{Query}-.->Sqlite3[(Sqlite3)]-.yes.-Query{Query}-.->Verify>Verify]-.->Write>Write]-.->End>end];
-```
-
 
 ## 😊 Thanks
 

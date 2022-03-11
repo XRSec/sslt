@@ -1,4 +1,4 @@
-package rsa
+package x509
 
 import (
 	"bytes"
@@ -19,14 +19,12 @@ import (
 	. "sslt/src"
 	"strings"
 	"time"
-
-	"github.com/fatih/color"
 )
 
 var (
 	caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL, host string
 	caStatus, certStatus                                             bool
-	CaTLSConf, CertTLSConf                                           *tls.Config
+	caTLSConf, certTLSConf                                           *tls.Config
 )
 
 func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Config, string, string) {
@@ -48,26 +46,39 @@ func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Confi
 
 	// create our private and public key
 	caPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 
 	// create the CA
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivyKey.PublicKey, caPrivyKey)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 
 	// pem encode
-	caPEM := new(bytes.Buffer)
+	var caPEM = new(bytes.Buffer)
 	err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 
 	// caPrivyKey encode
-	caPrivyKeyPEM := new(bytes.Buffer)
+	var caPrivyKeyPEM = new(bytes.Buffer)
 	err = pem.Encode(caPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivyKey),
 	})
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 
 	// write ca to sql & file
 	// 如果存在证书则导出
@@ -80,7 +91,7 @@ func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Confi
 	caPrivyKeyPEM = bytes.NewBuffer([]byte(caPrivyKeyPEMSQL))
 
 	// generate certs TLSConf
-	capool := x509.NewCertPool()
+	var capool = x509.NewCertPool()
 	capool.AppendCertsFromPEM(caPEM.Bytes())
 	caTLSConf := &tls.Config{
 		RootCAs: capool,
@@ -91,13 +102,20 @@ func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Confi
 func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, country, host, protocol string) (*tls.Config, string, string) {
 	// Parsing ca configuration
 	var ca, err = tls.X509KeyPair([]byte(caPEMSQL), []byte(CaPrivyKeyPEMSQL))
-	CheckErr(err)
-	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+	if err != nil {
 		CheckErr(err)
+		return nil, "", ""
+	}
+	ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0])
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
 	}
 	var x509ca *x509.Certificate
-	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+	x509ca, err = x509.ParseCertificate(ca.Certificate[0])
+	if err != nil {
 		CheckErr(err)
+		return nil, "", ""
 	}
 	// set up our server certificate
 	cert := &x509.Certificate{
@@ -138,27 +156,36 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 
 	// create our private and public key
 	certPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	CheckErr(err)
-
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 	// create the CA
 	certBytes, err := x509.CreateCertificate(rand.Reader, cert, x509ca, &certPrivyKey.PublicKey, ca.PrivateKey)
-	CheckErr(err)
-
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 	// pem encode
 	certPEM := new(bytes.Buffer)
 	err = pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
-	CheckErr(err)
-
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 	// caPrivyKey encode
-	certPrivyKeyPEM := new(bytes.Buffer)
+	var certPrivyKeyPEM = new(bytes.Buffer)
 	err = pem.Encode(certPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivyKey),
 	})
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
 
 	// write ca to sql & file
 	// 如果存在证书则导出
@@ -173,10 +200,15 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 	// generate certs TLSConf
 	certpair, err := tls.X509KeyPair(certPEM.Bytes(), certPrivyKeyPEM.Bytes())
 	CheckErr(err)
-	CertTLSConf = &tls.Config{
+	certTLSConf = &tls.Config{
 		Certificates: []tls.Certificate{certpair},
 	}
-	return CertTLSConf, certPEMSQL, certPrivyKeyPEMSQL
+	if err != nil {
+		CheckErr(err)
+		return nil, "", ""
+	}
+	Notice(" [ 服务证书: %v 创建完成! ]", certCommonName)
+	return certTLSConf, certPEMSQL, certPrivyKeyPEMSQL
 }
 
 func ImportQuire(tableName, commonName, host, protocol, data string, certificatePEM, certificatePrivyKeyPEM []byte) {
@@ -186,21 +218,24 @@ func ImportQuire(tableName, commonName, host, protocol, data string, certificate
 }
 
 func ImportCert(caPEMFILE, caPrivyKeyPEMFILE string) {
-	certificatePEM, err := ioutil.ReadFile(caPEMFILE)
-	if err != nil {
-		CheckErr(errors.New("找不到文件: " + caPEMFILE))
+	if caPEMFILE == "default" && caPrivyKeyPEMFILE == "default" {
+		CheckErr(errors.New("没有设置证书内容，请检查证书内容！"))
+		return
 	}
+	// 从网页传过来的数据不存在文件
+	certificatePEM := []byte(caPEMFILE)
+	certificatePrivyKeyPEM := []byte(caPrivyKeyPEMFILE)
 
-	certificatePrivyKeyPEM, err := ioutil.ReadFile(caPrivyKeyPEMFILE)
+	ca, err := tls.X509KeyPair(certificatePEM, certificatePrivyKeyPEM)
 	if err != nil {
-		CheckErr(errors.New("找不到文件: " + caPrivyKeyPEMFILE))
+		CheckErr(errors.New("证书匹配错误,请检查证书内容!"))
+		return
 	}
-	var ca, caErr = tls.X509KeyPair(certificatePEM, certificatePrivyKeyPEM)
-	CheckErr(caErr)
-	color.Red(" [ 证书文件存在! ]")
-	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
-		CheckErr(caErr)
+	if err != nil {
+		CheckErr(err)
+		return
 	}
+	Warning(" [ 证书内容有效! : ", ca.Leaf.Subject.CommonName+" ]")
 	// 根证书不需要设置域名和IP
 	if ca.Leaf.IsCA == true {
 		host = "root"
@@ -233,14 +268,17 @@ func ImportCert(caPEMFILE, caPrivyKeyPEMFILE string) {
 			CheckErr(errors.New("cert 没有找到IP或者域名"))
 		}
 	}
-	ImportQuire(ca.Leaf.Issuer.CommonName, ca.Leaf.Subject.CommonName, host, "rsa", ca.Leaf.NotAfter.Format("2006-01-02 15:04:05"), certificatePEM, certificatePrivyKeyPEM)
+	// TODO 这里需要判断证书类型
+	ImportQuire(ca.Leaf.Issuer.CommonName, ca.Leaf.Subject.CommonName, host, "x509", ca.Leaf.NotAfter.Format("2006-01-02 15:04:05"), certificatePEM, certificatePrivyKeyPEM)
 }
 
 func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	// set up the httptest.Server using our certificate signed by our CA
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprintln(w, "Success!")
-		CheckErr(err)
+		if err != nil {
+			CheckErr(err)
+		}
 	}))
 	server.TLS = certTLSConf
 	server.StartTLS()
@@ -251,11 +289,11 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	tmpIP := strings.Replace(server.URL, "https://", "", -1)
 
 	http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		color.Red(" [ 开始验证证书 ]")
-		color.Green("  证书域名    =  %v", addr)
+		Warning(" [ 开始验证证书 ]", "")
+		Notice("  证书域名    =  ", addr)
 		if addr == tmpDomain {
 			addr = tmpIP
-			color.Green("  证书测试IP  =  %v", addr)
+			Notice("  证书测试IP  =  ", addr)
 		}
 		dialer := &net.Dialer{
 			Timeout:   30 * time.Second,
@@ -271,24 +309,36 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 
 	// make a request to the server
 	resp, err := http.Get("https://" + tmpDomain)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return
+	}
 	respBodyBytes, err := ioutil.ReadAll(resp.Body)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return
+	}
 	body := strings.TrimSpace(string(respBodyBytes[:]))
 	if body == "Success!" {
-		color.Red(" [ %v ]", body)
+		Warning(" [ 证书验证成功! ]", "")
 	} else {
-		color.Red(" [ not successful! ]")
+		CheckErr(errors.New(" [ not successful! ]"))
 	}
 }
 
 func WriteCert(caPEM, caPrivyKeyPEM, caPEMFile, caPrivyKeyPEMFile string) {
 	Notice(" 导出证书公钥:       ", caPEMFile)
 	err := ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return
+	}
 	Notice(" 导出证书私钥:       ", caPrivyKeyPEMFile+"\n")
 	err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644)
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return
+	}
 }
 
 func Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) (*tls.Config, *tls.Config) {
@@ -303,30 +353,34 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 			写入证书
 	*/
 	// Check whether a certificate exists >>
+	// TODO这里需要追踪 result
 	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(caCommonName, caCommonName, "root", protocol); caStatus == true {
 		// GENERATE CERTIFICATE
 		Notice(" 生成证书字段:      ", "「CA CommonName: "+caCommonName+"」「CA Organization: "+caCommonName+"」「Protocol: "+protocol+"」")
-		CaTLSConf, caPEMSQL, caPrivyKeyPEMSQL = caSetup(caCommonName, caOrganization, country, protocol)
+		caTLSConf, caPEMSQL, caPrivyKeyPEMSQL = caSetup(caCommonName, caOrganization, country, protocol)
 	} else {
 		// Read and write the certificate from the database
 		caPool := x509.NewCertPool()
 		caPool.AppendCertsFromPEM([]byte(caPEMSQL))
-		CaTLSConf = &tls.Config{
+		caTLSConf = &tls.Config{
 			RootCAs: caPool,
 		}
 	}
-	WriteCert(caPEMSQL, caPrivyKeyPEMSQL, RootPath+"ca.pem", RootPath+"ca.key.pem")
+	//WriteCert(caPEMSQL, caPrivyKeyPEMSQL, RootPath+"ca.pem", RootPath+"ca.key.pem")
 	// GENERATE CERTIFICATE
 	if certStatus, certPEMSQL, certPrivyKeyPEMSQL = CaInquire(certCommonName, certCommonName, host, protocol); certStatus == true {
-		CertTLSConf, certPEMSQL, certPrivyKeyPEMSQL = certSetup(caPEMSQL, caPrivyKeyPEMSQL, certCommonName, certOrganization, country, host, protocol)
+		certTLSConf, certPEMSQL, certPrivyKeyPEMSQL = certSetup(caPEMSQL, caPrivyKeyPEMSQL, certCommonName, certOrganization, country, host, protocol)
 	} else {
 		cert, err := tls.X509KeyPair([]byte(certPEMSQL), []byte(certPrivyKeyPEMSQL))
-		CheckErr(err)
-		CertTLSConf = &tls.Config{
+		if err != nil {
+			CheckErr(err)
+			return nil, nil
+		}
+		certTLSConf = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		}
 	}
-	WriteCert(certPEMSQL, certPrivyKeyPEMSQL, RootPath+"server.pem", RootPath+"server.key.pem")
-	return CaTLSConf, CertTLSConf
+	//WriteCert(certPEMSQL, certPrivyKeyPEMSQL, RootPath+"server.pem", RootPath+"server.key.pem")
+	return caTLSConf, certTLSConf
 	// << Check whether a certificate exists
 }

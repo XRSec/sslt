@@ -2,6 +2,7 @@ package src
 
 import (
 	"bytes"
+	"fmt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"strconv"
@@ -15,20 +16,35 @@ var (
 	db             *gorm.DB
 	ShellFolder, _ = os.Getwd()
 	RootPath       = ShellFolder + "/sslt/"
-	certs          struct {
-		ID            uint `gorm:"primaryKey"`
-		CommonName    string
-		Host          string
-		Protocol      string
-		Data          string
-		CaPEM         string
-		CaPrivyKeyPEM string
-	}
-	sqliteMaster struct {
-		Type string
-		Name string
-	}
+	sqliteMaster   = SqliteMaster{}
+	certs          = Certs{}
+	//certs          struct {
+	//	ID            uint `gorm:"primaryKey"`
+	//	CommonName    string
+	//	Host          string
+	//	Protocol      string
+	//	Data          string
+	//	CaPEM         string
+	//	CaPrivyKeyPEM string
+	//}
+	//sqliteMaster struct {
+	//	Name string
+	//}
 )
+
+type Certs struct {
+	ID            uint `gorm:"primaryKey"`
+	CommonName    string
+	Host          string
+	Protocol      string
+	Data          string
+	CaPEM         string
+	CaPrivyKeyPEM string
+}
+
+type SqliteMaster struct {
+	Name []string
+}
 
 type Product struct {
 	ID            uint `gorm:"primaryKey"`
@@ -49,10 +65,13 @@ func init() {
 		err = os.Mkdir(RootPath, os.ModePerm)
 	}
 	//color.Red("[*] Debug mode is on")
-	db, err = gorm.Open(sqlite.Open("sslt/sslt.db"), &gorm.Config{
+	db, err = gorm.Open(sqlite.Open(RootPath+"sslt.db"), &gorm.Config{
 		//Logger: logger.Default.LogMode(logger.Info),
 	})
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return
+	}
 }
 
 func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKeyPEM *bytes.Buffer) (string, string) {
@@ -64,7 +83,10 @@ func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKey
 	tableName = strings.Replace(tableName, " ", "_", -1)
 	commonname = strings.Replace(commonname, " ", "_", -1)
 	err := db.Table(tableName).AutoMigrate(&Product{})
-	CheckErr(err)
+	if err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	db.Table(tableName).Create(&Product{
 		CommonName:    commonname,
 		Host:          host,
@@ -84,10 +106,17 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 	*/
 	tableName = strings.Replace(tableName, " ", "_", -1)
 	commonname = strings.Replace(commonname, " ", "_", -1)
-	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name == tableName {
+	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name[1] == tableName {
+		// @NUM DATABASE TABLE NAMES CANNOT BE REPEATED
 		Notice(" 查询数据库 表名:    ", "["+tableName+"] 存在!")
-		if db.Select("*").Table(tableName).Where("common_name = ? AND host = ? AND protocol = ?", commonname, host, protocol).Scan(&certs); certs.CommonName == commonname && certs.ID != 0 {
-			// A certificate exists. Read the certificate
+		var NUM int64
+
+		if db.Select("*").Table(tableName).Where("common_name = ? AND host = ? AND protocol = ?", commonname, host, protocol).Count(&NUM).Scan(&certs); certs.CommonName == commonname && certs.ID != 0 {
+			// SELECT COUNT(*) AS "NUM",* FROM 'GTS_Root_R1' WHERE common_name='GTS_CA_1C3' AND host='localhost' AND protocol='x509';
+			// A certificate exists. Read the certificate and return it.
+			if NUM != 0 && NUM != 1 {
+				Warning(" 查询数据库 证书:    ", "["+commonname+"] 异常, 存在多份存档!")
+			}
 			Notice(" 查询数据库 证书:    ", "["+commonname+"] 存在!")
 			t1, _ := time.Parse("2006-01-02 15:04:05", certs.Data)
 			Notice(" 证书有效期:         ", "["+strconv.FormatInt(int64(t1.Sub(time.Now()).Hours()/24), 10)+"] 天")
@@ -100,4 +129,21 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 		// There is no certificate in the database with the Root CommonName
 		return true, certs.CaPEM, certs.CaPrivyKeyPEM
 	}
+}
+
+// QuireAll TODO 查询所有证书
+func QuireAll() string {
+	var tableNames string
+	db.Select("name").Table("sqlite_master").Find(&SqliteMaster{})
+	//for i := 0; i < len(sqliteMaster.Name); i++ {
+	//	if len(sqliteMaster.Name) == 1 {
+	//		tableNames = sqliteMaster.Name
+	//	} else if i+1 < len(sqliteMaster.Name) {
+	//		tableNames += " " + sqliteMaster.Name[i]
+	//	} else {
+	//		tableNames += sqliteMaster.Name[i]
+	//	}
+	//}
+	fmt.Println(SqliteMaster{}.Name[0])
+	return tableNames
 }
