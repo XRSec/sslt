@@ -2,6 +2,7 @@ package src
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -13,23 +14,12 @@ import (
 )
 
 var (
+	err            error
 	db             *gorm.DB
 	ShellFolder, _ = os.Getwd()
 	RootPath       = ShellFolder + "/sslt/"
-	sqliteMaster   = SqliteMaster{}
-	certs          = Certs{}
-	//certs          struct {
-	//	ID            uint `gorm:"primaryKey"`
-	//	CommonName    string
-	//	Host          string
-	//	Protocol      string
-	//	Data          string
-	//	CaPEM         string
-	//	CaPrivyKeyPEM string
-	//}
-	//sqliteMaster struct {
-	//	Name string
-	//}
+	sqliteMaster   SqliteMaster
+	certs          Certs
 )
 
 type Certs struct {
@@ -43,37 +33,38 @@ type Certs struct {
 }
 
 type SqliteMaster struct {
-	Name []string
+	Name string
+	Type string
 }
 
 type Product struct {
-	ID            uint `gorm:"primaryKey"`
-	CommonName    string
-	Host          string
-	Protocol      string
-	Data          string
-	CaPEM         string
-	CaPrivyKeyPEM string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	DeletedAt     gorm.DeletedAt `gorm:"index"`
+	Certs     // 继承
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 func init() {
-	_, err := os.Stat(RootPath)
-	if err != nil {
-		err = os.Mkdir(RootPath, os.ModePerm)
+	if _, err = os.Stat(RootPath); err != nil {
+		if err = os.Mkdir(RootPath, os.ModePerm); err != nil {
+			CheckErr(errors.New("创建目录失败"))
+			return
+		}
 	}
 	//color.Red("[*] Debug mode is on")
-	db, err = gorm.Open(sqlite.Open(RootPath+"sslt.db"), &gorm.Config{
+	if db, err = gorm.Open(sqlite.Open(RootPath+"sslt.db"), &gorm.Config{
 		//Logger: logger.Default.LogMode(logger.Info),
-	})
-	if err != nil {
+	}); err != nil {
 		CheckErr(err)
 		return
 	}
 }
 
+func Rename(oldname string) string {
+	oldname = strings.Replace(oldname, " ", "_", -1)
+	return oldname
+
+}
 func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKeyPEM *bytes.Buffer) (string, string) {
 	// 如果存在证书则退出
 	//if certStatus, CaPEMSQL, CaPrivyKeyPEMSQL := CaInquire(tableName, commonname, host, protocol); certStatus == false {
@@ -82,12 +73,11 @@ func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKey
 	// 不存在则创建
 	tableName = strings.Replace(tableName, " ", "_", -1)
 	commonname = strings.Replace(commonname, " ", "_", -1)
-	err := db.Table(tableName).AutoMigrate(&Product{})
-	if err != nil {
+	if err = db.Table(tableName).AutoMigrate(&Product{}); err != nil {
 		CheckErr(err)
 		return "", ""
 	}
-	db.Table(tableName).Create(&Product{
+	db.Table(tableName).Create(&Certs{
 		CommonName:    commonname,
 		Host:          host,
 		Protocol:      protocol,
@@ -104,22 +94,22 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 		Return false if tables/certificates exist; 'generate' if not
 		SqliteMaster Inquire tableName
 	*/
-	tableName = strings.Replace(tableName, " ", "_", -1)
-	commonname = strings.Replace(commonname, " ", "_", -1)
-	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name[1] == tableName {
+	tableName = Rename(tableName)
+	commonname = Rename(commonname)
+	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name == tableName {
 		// @NUM DATABASE TABLE NAMES CANNOT BE REPEATED
-		Notice(" 查询数据库 表名:    ", "["+tableName+"] 存在!")
+		Notice("查询数据库 表名:", "["+tableName+"] 存在!")
 		var NUM int64
 
 		if db.Select("*").Table(tableName).Where("common_name = ? AND host = ? AND protocol = ?", commonname, host, protocol).Count(&NUM).Scan(&certs); certs.CommonName == commonname && certs.ID != 0 {
 			// SELECT COUNT(*) AS "NUM",* FROM 'GTS_Root_R1' WHERE common_name='GTS_CA_1C3' AND host='localhost' AND protocol='x509';
 			// A certificate exists. Read the certificate and return it.
 			if NUM != 0 && NUM != 1 {
-				Warning(" 查询数据库 证书:    ", "["+commonname+"] 异常, 存在多份存档!")
+				Warning("查询数据库 证书:", "["+commonname+" 异常, 存在多份存档!")
 			}
-			Notice(" 查询数据库 证书:    ", "["+commonname+"] 存在!")
+			Notice("查询数据库 证书:", "["+commonname+" 存在!")
 			t1, _ := time.Parse("2006-01-02 15:04:05", certs.Data)
-			Notice(" 证书有效期:         ", "["+strconv.FormatInt(int64(t1.Sub(time.Now()).Hours()/24), 10)+"] 天")
+			Notice("证书有效期:", "["+strconv.FormatInt(int64(t1.Sub(time.Now()).Hours()/24), 10)+" 天")
 			return false, certs.CaPEM, certs.CaPrivyKeyPEM
 		} else {
 			// No certificate exists, write to database
@@ -133,8 +123,7 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 
 // QuireAll TODO 查询所有证书
 func QuireAll() string {
-	var tableNames string
-	db.Select("name").Table("sqlite_master").Find(&SqliteMaster{})
+	db.Select("*").Table("sqlite_master").Scan(&sqliteMaster)
 	//for i := 0; i < len(sqliteMaster.Name); i++ {
 	//	if len(sqliteMaster.Name) == 1 {
 	//		tableNames = sqliteMaster.Name
@@ -144,6 +133,7 @@ func QuireAll() string {
 	//		tableNames += sqliteMaster.Name[i]
 	//	}
 	//}
-	fmt.Println(SqliteMaster{}.Name[0])
-	return tableNames
+	fmt.Println(sqliteMaster)
+	return sqliteMaster.Name
+	//type:table
 }

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	Errors string
+	Errors map[string]string
 	//	notice  = color.New(color.FgBlue).PrintfFunc()
 	//	warning = color.New(color.FgYellow).PrintfFunc()
 	//	errors  = color.New(color.FgRed).PrintfFunc()
@@ -32,28 +32,30 @@ func CheckErr(err error) {
 		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05"))
 		color.New(color.FgGreen).PrintfFunc()("%v] %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
 		color.Yellow(" %v", err)
-		Errors += "[sslt " + time.Now().Format("15:04:05") + "] " + path.Ext(runtime.FuncForPC(pc).Name())[1:] + " " + path.Base(file) + ":" + strconv.Itoa(line) + " " + err.Error() + "\n"
+		color.New()
+		Errors["[sslt "+time.Now().Format("15:04:05")+"] "+path.Ext(runtime.FuncForPC(pc).Name())[1:]+" "+path.Base(file)+":"+strconv.Itoa(line)] = err.Error()
+
 	}
 }
 
 // ErrorS 返回所有的错误信息
-func ErrorS() string {
+func ErrorS() map[string]string {
 	return Errors
 }
 func Notice(noticeTXT, resultTXT string) {
 	color.New(color.FgBlue).PrintfFunc()(" %v", noticeTXT)
 	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
-	Errors += noticeTXT + resultTXT + "\n"
+	Errors[noticeTXT] = resultTXT
 }
 
 func Error(noticeTXT, resultTXT string) {
 	color.New(color.FgYellow).PrintfFunc()(" %v", noticeTXT)
 	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
-	Errors += noticeTXT + resultTXT + "\n"
+	Errors[noticeTXT] = resultTXT
 }
 
 func Warning(noticeTXT, resultTXT string) {
 	color.New(color.FgRed).PrintfFunc()(" %v", noticeTXT)
 	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
-	Errors += noticeTXT + resultTXT + "\n"
+	Errors[noticeTXT] = resultTXT
 }

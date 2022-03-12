@@ -22,60 +22,105 @@ import (
 )
 
 var (
-	caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL, host string
-	caStatus, certStatus                                             bool
-	caTLSConf, certTLSConf                                           *tls.Config
+	err                                                                    error
+	caStatus, certStatus                                                   bool
+	caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL, host, body string
+	respBodyBytes, caBytes, certBytes                                      []byte
+	caTLSConf, certTLSConf                                                 *tls.Config
+	caPrivyKey, certPrivyKey                                               *rsa.PrivateKey
+	resp                                                                   *http.Response
 )
 
-func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Config, string, string) {
-	// set up our CA certificate
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(int64(time.Now().Year())),
+func certificateTemplate(templateCommonName, templateOrganization, templateCountry, host string, notAfterYear int, isCA bool) *x509.Certificate {
+	certTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			CommonName:   caCommonName,
-			Organization: []string{caOrganization},
-			Country:      []string{country},
+			CommonName:   templateCommonName,
+			Organization: []string{templateOrganization},
+			Country:      []string{templateCountry},
 		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
-		IsCA:                  true,
-		BasicConstraintsValid: true,
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().AddDate(notAfterYear, 0, 0),
+		//SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		IsCA:                  isCA,
+		BasicConstraintsValid: isCA,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 	}
 
+	// IP，DNS参数
+	if isCA != true {
+		if ip := net.ParseIP(host); ip != nil {
+			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
+		} else if strings.Contains(host, " ") {
+			// string to []string
+			// 判断是否存在逗号
+			hostTmp := strings.Split(host, " ")
+			for i := 0; i < len(hostTmp); i++ {
+				if ip := net.ParseIP(hostTmp[i]); ip != nil {
+					certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
+				} else {
+					certTemplate.DNSNames = append(certTemplate.DNSNames, hostTmp[i])
+					if len(hostTmp) == 1 {
+						certTemplate.Subject.CommonName = hostTmp[0]
+					}
+				}
+			}
+		} else {
+			certTemplate.DNSNames = append(certTemplate.DNSNames, host)
+			certTemplate.Subject.CommonName = host
+		}
+	}
+
+	return certTemplate
+}
+
+func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Config, string, string) {
+	ca := certificateTemplate(caCommonName, caOrganization, country, "", 10, true)
+	// set up our CA certificate
+	//ca := &x509.Certificate{
+	//	SerialNumber: big.NewInt(int64(time.Now().Year())),
+	//	Subject: pkix.Name{
+	//		CommonName:   caCommonName,
+	//		Organization: []string{caOrganization},
+	//		Country:      []string{country},
+	//	},
+	//	NotBefore:             time.Now(),
+	//	NotAfter:              time.Now().AddDate(10, 0, 0),
+	//	IsCA:                  true,
+	//	BasicConstraintsValid: true,
+	//	ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+	//	KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+	//}
+
 	// create our private and public key
-	caPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
+	if caPrivyKey, err = rsa.GenerateKey(rand.Reader, 4096); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 
 	// create the CA
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivyKey.PublicKey, caPrivyKey)
-	if err != nil {
+	if caBytes, err = x509.CreateCertificate(rand.Reader, ca, ca, &caPrivyKey.PublicKey, caPrivyKey); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 
 	// pem encode
 	var caPEM = new(bytes.Buffer)
-	err = pem.Encode(caPEM, &pem.Block{
+	if err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
-	})
-	if err != nil {
+	}); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 
 	// caPrivyKey encode
 	var caPrivyKeyPEM = new(bytes.Buffer)
-	err = pem.Encode(caPrivyKeyPEM, &pem.Block{
+	if err = pem.Encode(caPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivyKey),
-	})
-	if err != nil {
+	}); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
@@ -93,9 +138,10 @@ func caSetup(caCommonName, caOrganization, country, protocol string) (*tls.Confi
 	// generate certs TLSConf
 	var capool = x509.NewCertPool()
 	capool.AppendCertsFromPEM(caPEM.Bytes())
-	caTLSConf := &tls.Config{
+	caTLSConf = &tls.Config{
 		RootCAs: capool,
 	}
+	Notice("CA 证书创建完成!", caCommonName)
 	return caTLSConf, caPEMSQL, caPrivyKeyPEMSQL
 }
 
@@ -106,83 +152,79 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 		CheckErr(err)
 		return nil, "", ""
 	}
-	ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0])
-	if err != nil {
+	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 	var x509ca *x509.Certificate
-	x509ca, err = x509.ParseCertificate(ca.Certificate[0])
-	if err != nil {
+	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 	// set up our server certificate
-	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(2019),
-		Subject: pkix.Name{
-			CommonName:   certCommonName,
-			Organization: []string{certOrganization},
-			Country:      []string{country},
-		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().AddDate(2, 0, 0),
-		//SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:    x509.KeyUsageDigitalSignature,
-	}
 
-	// IP，DNS参数
-	if ip := net.ParseIP(host); ip != nil {
-		cert.IPAddresses = append(cert.IPAddresses, ip)
-	} else if strings.Contains(host, " ") {
-		// string to []string
-		// 判断是否存在逗号
-		hostTmp := strings.Split(host, " ")
-		for i := 0; i < len(hostTmp); i++ {
-			if ip := net.ParseIP(hostTmp[i]); ip != nil {
-				cert.IPAddresses = append(cert.IPAddresses, ip)
-			} else {
-				cert.DNSNames = append(cert.DNSNames, hostTmp[i])
-				if len(hostTmp) == 1 {
-					cert.Subject.CommonName = hostTmp[0]
-				}
-			}
-		}
-	} else {
-		cert.DNSNames = append(cert.DNSNames, host)
-		cert.Subject.CommonName = host
-	}
+	cert := certificateTemplate(certCommonName, certOrganization, country, host, 10, false)
+	//cert := &x509.Certificate{
+	//	SerialNumber: big.NewInt(2019),
+	//	Subject: pkix.Name{
+	//		CommonName:   certCommonName,
+	//		Organization: []string{certOrganization},
+	//		Country:      []string{country},
+	//	},
+	//	NotBefore: time.Now(),
+	//	NotAfter:  time.Now().AddDate(2, 0, 0),
+	//	//SubjectKeyId: []byte{1, 2, 3, 4, 6},
+	//	ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+	//	KeyUsage:    x509.KeyUsageDigitalSignature,
+	//}
+	//
+	//// IP，DNS参数
+	//if ip := net.ParseIP(host); ip != nil {
+	//	cert.IPAddresses = append(cert.IPAddresses, ip)
+	//} else if strings.Contains(host, " ") {
+	//	// string to []string
+	//	// 判断是否存在逗号
+	//	hostTmp := strings.Split(host, " ")
+	//	for i := 0; i < len(hostTmp); i++ {
+	//		if ip := net.ParseIP(hostTmp[i]); ip != nil {
+	//			cert.IPAddresses = append(cert.IPAddresses, ip)
+	//		} else {
+	//			cert.DNSNames = append(cert.DNSNames, hostTmp[i])
+	//			if len(hostTmp) == 1 {
+	//				cert.Subject.CommonName = hostTmp[0]
+	//			}
+	//		}
+	//	}
+	//} else {
+	//	cert.DNSNames = append(cert.DNSNames, host)
+	//	cert.Subject.CommonName = host
+	//}
 
 	// create our private and public key
-	certPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
+	if certPrivyKey, err = rsa.GenerateKey(rand.Reader, 4096); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 	// create the CA
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, x509ca, &certPrivyKey.PublicKey, ca.PrivateKey)
-	if err != nil {
+	if certBytes, err = x509.CreateCertificate(rand.Reader, cert, x509ca, &certPrivyKey.PublicKey, ca.PrivateKey); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 	// pem encode
 	certPEM := new(bytes.Buffer)
-	err = pem.Encode(certPEM, &pem.Block{
+	if err = pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
-	})
-	if err != nil {
+	}); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
 	// caPrivyKey encode
 	var certPrivyKeyPEM = new(bytes.Buffer)
-	err = pem.Encode(certPrivyKeyPEM, &pem.Block{
+	if err = pem.Encode(certPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivyKey),
-	})
-	if err != nil {
+	}); err != nil {
 		CheckErr(err)
 		return nil, "", ""
 	}
@@ -203,11 +245,7 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 	certTLSConf = &tls.Config{
 		Certificates: []tls.Certificate{certpair},
 	}
-	if err != nil {
-		CheckErr(err)
-		return nil, "", ""
-	}
-	Notice(" [ 服务证书: %v 创建完成! ]", certCommonName)
+	Notice("SERVER 证书创建完成!", certCommonName)
 	return certTLSConf, certPEMSQL, certPrivyKeyPEMSQL
 }
 
@@ -225,17 +263,16 @@ func ImportCert(caPEMFILE, caPrivyKeyPEMFILE string) {
 	// 从网页传过来的数据不存在文件
 	certificatePEM := []byte(caPEMFILE)
 	certificatePrivyKeyPEM := []byte(caPrivyKeyPEMFILE)
-
-	ca, err := tls.X509KeyPair(certificatePEM, certificatePrivyKeyPEM)
-	if err != nil {
+	var ca tls.Certificate
+	if ca, err = tls.X509KeyPair(certificatePEM, certificatePrivyKeyPEM); err != nil {
 		CheckErr(errors.New("证书匹配错误,请检查证书内容!"))
 		return
 	}
-	if err != nil {
-		CheckErr(err)
+	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+		CheckErr(errors.New("证书解析错误,请检查证书内容!"))
 		return
 	}
-	Warning(" [ 证书内容有效! : ", ca.Leaf.Subject.CommonName+" ]")
+	Warning("证书内容有效!: ", ca.Leaf.Subject.CommonName)
 	// 根证书不需要设置域名和IP
 	if ca.Leaf.IsCA == true {
 		host = "root"
@@ -278,6 +315,7 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 		_, err := fmt.Fprintln(w, "Success!")
 		if err != nil {
 			CheckErr(err)
+			return
 		}
 	}))
 	server.TLS = certTLSConf
@@ -289,11 +327,11 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	tmpIP := strings.Replace(server.URL, "https://", "", -1)
 
 	http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		Warning(" [ 开始验证证书 ]", "")
-		Notice("  证书域名    =  ", addr)
+		Warning("开始验证证书", "")
+		Notice("证书域名", addr)
 		if addr == tmpDomain {
 			addr = tmpIP
-			Notice("  证书测试IP  =  ", addr)
+			Notice("证书测试IP", addr)
 		}
 		dialer := &net.Dialer{
 			Timeout:   30 * time.Second,
@@ -308,34 +346,31 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	//time.Sleep(time.Second * 10)
 
 	// make a request to the server
-	resp, err := http.Get("https://" + tmpDomain)
-	if err != nil {
+	if resp, err = http.Get("https://" + tmpDomain); err != nil {
 		CheckErr(err)
 		return
 	}
-	respBodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
+	if respBodyBytes, err = ioutil.ReadAll(resp.Body); err != nil {
 		CheckErr(err)
 		return
 	}
 	body := strings.TrimSpace(string(respBodyBytes[:]))
 	if body == "Success!" {
-		Warning(" [ 证书验证成功! ]", "")
+		Warning("证书验证成功!", "")
 	} else {
-		CheckErr(errors.New(" [ not successful! ]"))
+		CheckErr(errors.New("证书验证失败!"))
+		return
 	}
 }
 
 func WriteCert(caPEM, caPrivyKeyPEM, caPEMFile, caPrivyKeyPEMFile string) {
 	Notice(" 导出证书公钥:       ", caPEMFile)
-	err := ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644)
-	if err != nil {
+	if err = ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644); err != nil {
 		CheckErr(err)
 		return
 	}
 	Notice(" 导出证书私钥:       ", caPrivyKeyPEMFile+"\n")
-	err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644)
-	if err != nil {
+	if err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644); err != nil {
 		CheckErr(err)
 		return
 	}
@@ -356,7 +391,7 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 	// TODO这里需要追踪 result
 	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(caCommonName, caCommonName, "root", protocol); caStatus == true {
 		// GENERATE CERTIFICATE
-		Notice(" 生成证书字段:      ", "「CA CommonName: "+caCommonName+"」「CA Organization: "+caCommonName+"」「Protocol: "+protocol+"」")
+		Notice("生成证书字段:", "「CA CommonName: "+caCommonName+"」「CA Organization: "+caCommonName+"」「Protocol: "+protocol+"」")
 		caTLSConf, caPEMSQL, caPrivyKeyPEMSQL = caSetup(caCommonName, caOrganization, country, protocol)
 	} else {
 		// Read and write the certificate from the database

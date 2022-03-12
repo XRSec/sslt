@@ -1,15 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"net"
-	"sslt/encryption/x509"
-
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
-
+	"net"
+	"sslt/encryption/x509"
 	//"sslt/encryption/sm2"
 	. "sslt/src"
 )
@@ -17,6 +16,7 @@ import (
 var (
 	r, rk, rc, ro, s, sk, sc, so, c, h, p, buildTime, commitId, version, author string
 	help, v                                                                     bool
+	err                                                                         error
 )
 
 type Import struct {
@@ -72,10 +72,10 @@ func Api() {
 		})
 	})
 	req.GET("/list", func(c *gin.Context) {
-		caCerts := QuireAll()
+		//caCerts := QuireAll()
 		c.JSON(200, gin.H{
 			"Message": "List All Certificates",
-			caCerts:   caCerts,
+			//caCerts:   caCerts,
 		})
 	})
 	req.POST("/new", func(context *gin.Context) {
@@ -98,21 +98,25 @@ func Api() {
 			}
 			if p == "x509" {
 				// Generate CA Cert
-				Errors = ""
+				Errors = make(map[string]string)
 				Server(rc, ro, sc, so, c, h, p)
 			}
 			context.JSON(200, gin.H{
 				"Message": message,
-				"Result":  ErrorS(),
-				"Arguments": gin.H{
-					"rc": rc,
-					"ro": ro,
-					"sc": sc,
-					"so": so,
-					"c":  c,
-					"h":  h,
-					"p":  p,
-				}})
+				"Result": gin.H{
+					"Data":    ErrorS(),
+					"Version": version,
+					"Arguments": gin.H{
+						"rc": rc,
+						"ro": ro,
+						"sc": sc,
+						"so": so,
+						"c":  c,
+						"h":  h,
+						"p":  p,
+					},
+				},
+			})
 		}
 	})
 	req.GET("/new", func(c *gin.Context) {
@@ -149,7 +153,7 @@ func Api() {
 					// IMPORT CA CERTIFICATE
 					message = "CA证书正在导入! 等待数据库更新..."
 					//defer recoverFullName()
-					Errors = ""
+					Errors = make(map[string]string)
 					x509.ImportCert(r, rk)
 				}
 				if s != "default" && sk != "default" {
@@ -166,15 +170,84 @@ func Api() {
 			}
 			context.JSON(200, gin.H{
 				"Message": message,
-				"Result":  ErrorS(),
-				"Arguments": gin.H{
-					"r":  r,
-					"rk": rk,
-					"s":  s,
-					"sk": sk,
-				}})
+				"Result": gin.H{
+					"Data":    ErrorS(),
+					"Version": version,
+					"Arguments": gin.H{
+						"r":  r,
+						"rk": rk,
+						"s":  s,
+						"sk": sk,
+					},
+				},
+			})
 		}
 
+	})
+	req.POST("/download", func(context *gin.Context) {
+		if err = context.ShouldBind(&Import{}); err != nil {
+			context.JSON(200, gin.H{
+				"Message": "导入证书报错了! 请检查参数是否正确",
+			})
+		} else {
+			var (
+				message                                        = "证书正在导入! 等待数据库更新..."
+				caPEM, caPrivyKeyPEM, certPEM, certPrivyKeyPEM *bytes.Buffer
+			)
+			rc = context.DefaultPostForm("rc", "GTS Root R1")
+			ro = context.DefaultPostForm("ro", "Google Trust Services LLC")
+			sc = context.DefaultPostForm("sc", "GTS CA 1C3")
+			so = context.DefaultPostForm("so", "Google Trust Services LLC")
+			c = context.DefaultPostForm("c", "US")
+			h = context.DefaultPostForm("h", "localhost")
+			p = context.DefaultPostForm("p", "x509")
+			if r != "default" || s != "default" {
+				if r != "default" && rk != "default" {
+					// EXPORT CA CERTIFICATE
+					message = "CA证书正在导入! 等待数据库更新..."
+					//defer recoverFullName()
+					Errors = make(map[string]string)
+					if caStatus, caPEMSQL, caPrivyKeyPEMSQL := CaInquire(rc, rc, h, p); caStatus == false {
+						caPEM = bytes.NewBuffer([]byte(caPEMSQL))
+						caPrivyKeyPEM = bytes.NewBuffer([]byte(caPrivyKeyPEMSQL))
+					} else {
+						// todo 数据库没找到
+						fmt.Println(caPEM, caPrivyKeyPEM)
+					}
+				}
+				if s != "default" && sk != "default" {
+					// EXPORT CERT CERTIFICATE
+					message = "CA证书正在导入! 等待数据库更新..."
+					//defer recoverFullName()
+					Errors = make(map[string]string)
+					if certStatus, certPEMSQL, certPrivyKeyPEMSQL := CaInquire(sc, sc, h, p); certStatus == false {
+						certPEM = bytes.NewBuffer([]byte(certPEMSQL))
+						certPrivyKeyPEM = bytes.NewBuffer([]byte(certPrivyKeyPEMSQL))
+					} else {
+						// todo 数据库没找到
+						fmt.Println(certPEM, certPrivyKeyPEM)
+					}
+				}
+				if (r != "default" && rk == "default") || (r == "default" && rk != "default") || (s != "default" && sk == "default") || (s == "default" && sk != "default") {
+					message = "导入证书报错了! 请检查参数是否正确"
+				}
+			} else {
+				message = "导入证书报错了! 请检查参数是否正确"
+			}
+			context.JSON(200, gin.H{
+				"Message": message,
+				"Result": gin.H{
+					"Data":    ErrorS(),
+					"Version": version,
+					"Arguments": gin.H{
+						"r":  r,
+						"rk": rk,
+						"s":  s,
+						"sk": sk,
+					},
+				},
+			})
+		}
 	})
 	req.GET("/import", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -239,5 +312,6 @@ func main() {
 	}
 	// << Start by identifying the functionality the user needs
 	// api
-	Api()
+	//Api()
+	QuireAll()
 }
