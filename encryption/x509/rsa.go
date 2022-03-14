@@ -238,7 +238,7 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	}
 }
 
-func Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) {
+func Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) (string, string, string, string) {
 	// 预处理用户输入的内容
 	host = strings.Replace(host, ",", " ", -1)
 	// Check whether a certificate exists >>
@@ -276,4 +276,5 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 		Notice(" 暂时没有IP证书的验证方式,请尝试上传服务器验证", "")
 	}
 	// << Check whether a certificate exists
+	return caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL
 }
