@@ -65,27 +65,27 @@ func Rename(oldname string) string {
 	return oldname
 
 }
-func CaAdd(tableName, commonname, host, protocol, data string, caPEM, caPrivyKeyPEM *bytes.Buffer) (string, string) {
+func CaAdd(tableName, commonName, host, protocol, data string, caPEM, caPrivyKeyPEM *bytes.Buffer) (string, string) {
 	// 如果存在证书则退出
-	//if certStatus, CaPEMSQL, CaPrivyKeyPEMSQL := CaInquire(tableName, commonname, host, protocol); certStatus == false {
+	//if certStatus, CaPEMSQL, CaPrivyKeyPEMSQL := CaInquire(tableName, commonName, host, protocol); certStatus == false {
 	//	return CaPEMSQL, CaPrivyKeyPEMSQL
 	//}
 	// 不存在则创建
 	tableName = strings.Replace(tableName, " ", "_", -1)
-	commonname = strings.Replace(commonname, " ", "_", -1)
+	commonName = strings.Replace(commonName, " ", "_", -1)
 	if err = db.Table(tableName).AutoMigrate(&Product{}); err != nil {
 		CheckErr(err)
 		return "", ""
 	}
 	db.Table(tableName).Create(&Certs{
-		CommonName:    commonname,
+		CommonName:    commonName,
 		Host:          host,
 		Protocol:      protocol,
 		Data:          data,
 		CaPEM:         caPEM.String(),
 		CaPrivyKeyPEM: caPrivyKeyPEM.String(),
 	})
-	Notice(" 存储证书:           ", "["+commonname+"] 到数据库 表名 -> ["+tableName+"] -> 成功")
+	Notice("存储证书:", "["+commonName+"] 到数据库 表名 -> ["+tableName+"] -> 成功")
 	return caPEM.String(), caPrivyKeyPEM.String()
 }
 

@@ -9,16 +9,20 @@
 - If the same service certificate name and (IP | Domain) exist in the database, the certificate in the database will be exported
 - The domain name verification method uses setting temporary hosts to bypass DNS
 
+## 🟡  Web UI
+
+![](demo.png)
+
 ## ☂️ How to use
 
-### 0x01
+#### Run
 
 ```bash
 ./sslt
 # Port 8081
 ```
 
-### help
+#### Help
 
 ```bash
 ➜  ~ ./sslt -help
@@ -58,7 +62,7 @@ Usage of sslt:
  -------------------------------
 ```
 
-## Task
+## 🟠 Task
 - [ ] Api
   - [x] Web API
     - [ ] List All Certificates
@@ -76,9 +80,9 @@ Usage of sslt:
 - [x] Save to sqlite3
 - [x] Generate a certificate
 
-## Architecture
+## 🟢 Architecture
 
-### /
+#### /
 
 
 ```mermaid
@@ -86,7 +90,7 @@ graph LR
     Main((Main))-->Api{Api}-->gin{gin}
 ```
 
-### /import
+#### /import
 
 
 ```mermaid
@@ -94,7 +98,7 @@ flowchart LR
     gin{gin}-->Import{Import}--yes-->Sqlite3[(Sqlite3)]-->Import{Import}-->gin{gin};
 ```
 
-### /list
+#### /list
 
 
 ```mermaid
@@ -102,7 +106,7 @@ flowchart LR
     gin{gin}-->Sqlite3[(Sqlite3)]-->gin{gin};
 ```
 
-### /new
+#### /new
 ```mermaid
 flowchart LR
     gin{gin}-->Choice{Choice}-->Sqlite3[(Sqlite3)]-->gin{gin};

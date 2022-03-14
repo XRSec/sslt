@@ -29,12 +29,11 @@ func CheckErr(err error) {
 	if err != nil {
 		pc, file, line, _ := runtime.Caller(1)
 		color.New(color.FgRed).PrintfFunc()(" [sslt ")
-		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05"))
+		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05.00000"))
 		color.New(color.FgGreen).PrintfFunc()("%v] %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
 		color.Yellow(" %v", err)
-		color.New()
-		Errors["[sslt "+time.Now().Format("15:04:05")+"] "+path.Ext(runtime.FuncForPC(pc).Name())[1:]+" "+path.Base(file)+":"+strconv.Itoa(line)] = err.Error()
-
+		Errors["sslt "+time.Now().Format("15:04:05.00000")+" "+path.Ext(runtime.FuncForPC(pc).Name())[1:]+" "+path.Base(file)+":"+strconv.Itoa(line)] = err.Error()
+		runtime.Goexit()
 	}
 }
 
@@ -42,6 +41,7 @@ func CheckErr(err error) {
 func ErrorS() map[string]string {
 	return Errors
 }
+
 func Notice(noticeTXT, resultTXT string) {
 	color.New(color.FgBlue).PrintfFunc()(" %v", noticeTXT)
 	color.New(color.FgGreen).PrintfFunc()("%v\n", resultTXT)
