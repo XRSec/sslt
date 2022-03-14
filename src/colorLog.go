@@ -10,6 +10,7 @@ import (
 
 var (
 	Errors map[string]string
+	Quit   chan struct{}
 	//	notice  = color.New(color.FgBlue).PrintfFunc()
 	//	warning = color.New(color.FgYellow).PrintfFunc()
 	//	errors  = color.New(color.FgRed).PrintfFunc()
@@ -28,18 +29,13 @@ func HappyLogo() {
 func CheckErr(err error) {
 	if err != nil {
 		pc, file, line, _ := runtime.Caller(1)
-		color.New(color.FgRed).PrintfFunc()(" [sslt ")
+		color.New(color.FgRed).PrintfFunc()(" [sslt]")
 		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05.00000"))
 		color.New(color.FgGreen).PrintfFunc()("%v] %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
 		color.Yellow(" %v", err)
 		Errors["sslt "+time.Now().Format("15:04:05.00000")+" "+path.Ext(runtime.FuncForPC(pc).Name())[1:]+" "+path.Base(file)+":"+strconv.Itoa(line)] = err.Error()
-		runtime.Goexit()
 	}
-}
-
-// ErrorS 返回所有的错误信息
-func ErrorS() map[string]string {
-	return Errors
+	return
 }
 
 func Notice(noticeTXT, resultTXT string) {

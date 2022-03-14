@@ -1,13 +1,14 @@
 package src
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"strconv"
 	"strings"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	//"gorm.io/gorm/logger"
 	"os"
 	"time"
@@ -23,17 +24,17 @@ var (
 )
 
 type Certs struct {
-	ID            uint `gorm:"primaryKey"`
-	CommonName    string
-	Host          string
-	Protocol      string
-	Data          string
-	CaPEM         string
-	CaPrivyKeyPEM string
+	ID            uint   `gorm:"primaryKey"`
+	CommonName    string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
+	Host          string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
+	Protocol      string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
+	Data          string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
+	CaPEM         string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
+	CaPrivyKeyPEM string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
 }
 
 type SqliteMaster struct {
-	Name string
+	Name string `gorm:"index" sql:"type:VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_bin"`
 	Type string
 }
 
@@ -65,7 +66,7 @@ func Rename(oldname string) string {
 	return oldname
 
 }
-func CaAdd(tableName, commonName, host, protocol, data string, caPEM, caPrivyKeyPEM *bytes.Buffer) (string, string) {
+func CaAdd(tableName, commonName, host, protocol, data, caPEM, caPrivyKeyPEM string) (string, string) {
 	// 如果存在证书则退出
 	//if certStatus, CaPEMSQL, CaPrivyKeyPEMSQL := CaInquire(tableName, commonName, host, protocol); certStatus == false {
 	//	return CaPEMSQL, CaPrivyKeyPEMSQL
@@ -82,11 +83,11 @@ func CaAdd(tableName, commonName, host, protocol, data string, caPEM, caPrivyKey
 		Host:          host,
 		Protocol:      protocol,
 		Data:          data,
-		CaPEM:         caPEM.String(),
-		CaPrivyKeyPEM: caPrivyKeyPEM.String(),
+		CaPEM:         caPEM,
+		CaPrivyKeyPEM: caPrivyKeyPEM,
 	})
 	Notice("存储证书:", "["+commonName+"] 到数据库 表名 -> ["+tableName+"] -> 成功")
-	return caPEM.String(), caPrivyKeyPEM.String()
+	return caPEM, caPrivyKeyPEM
 }
 
 func CaInquire(tableName, commonname, host, protocol string) (bool, string, string) {
@@ -107,9 +108,9 @@ func CaInquire(tableName, commonname, host, protocol string) (bool, string, stri
 			if NUM != 0 && NUM != 1 {
 				Warning("查询数据库 证书:", "["+commonname+" 异常, 存在多份存档!")
 			}
-			Notice("查询数据库 证书:", "["+commonname+" 存在!")
+			Notice("查询数据库 证书:", "["+commonname+"] 存在!")
 			t1, _ := time.Parse("2006-01-02 15:04:05", certs.Data)
-			Notice("证书有效期:", "["+strconv.FormatInt(int64(t1.Sub(time.Now()).Hours()/24), 10)+" 天")
+			Notice("证书有效期:", "["+strconv.FormatInt(int64(t1.Sub(time.Now()).Hours()/24), 10)+"] 天")
 			return false, certs.CaPEM, certs.CaPrivyKeyPEM
 		} else {
 			// No certificate exists, write to database

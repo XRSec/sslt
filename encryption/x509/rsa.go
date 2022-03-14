@@ -52,53 +52,82 @@ func caSetup(caCommonName, caOrganization, country string) (string, string) {
 	ca := certificateTemplate(caCommonName, caOrganization, country, "", 10, true)
 	// set up our CA certificate
 	// create our private and public key
-	caPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	CheckErr(err)
+	var (
+		caPrivyKey *rsa.PrivateKey
+		caBytes    []byte
+	)
+	if caPrivyKey, err = rsa.GenerateKey(rand.Reader, 4096); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	// create the CA
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivyKey.PublicKey, caPrivyKey)
-	CheckErr(err)
+	if caBytes, err = x509.CreateCertificate(rand.Reader, ca, ca, &caPrivyKey.PublicKey, caPrivyKey); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
+
 	// pem encode
 	var caPEM = new(bytes.Buffer)
-	err = pem.Encode(caPEM, &pem.Block{
+	if err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
-	})
-	CheckErr(err)
+	}); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
+
 	// caPrivyKey encode
 	var caPrivyKeyPEM = new(bytes.Buffer)
-	err = pem.Encode(caPrivyKeyPEM, &pem.Block{
+	if err = pem.Encode(caPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivyKey),
-	})
-	CheckErr(err)
+	}); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
+
 	return caPEM.String(), caPrivyKeyPEM.String()
 }
 
 func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, country, host string) (string, string) {
 	// Parsing ca configuration
-	ca, caTemplate := getCertificate([]byte(caPEMSQL), []byte(CaPrivyKeyPEMSQL))
+	var (
+		ca           tls.Certificate
+		caTemplate   *x509.Certificate
+		certPrivyKey *rsa.PrivateKey
+		certBytes    []byte
+	)
+	ca, caTemplate = getCertificate([]byte(caPEMSQL), []byte(CaPrivyKeyPEMSQL))
 	// set up our server certificate
 	cert := certificateTemplate(certCommonName, certOrganization, country, host, 2, false)
 	// create our private and public key
-	certPrivyKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	CheckErr(err)
+	if certPrivyKey, err = rsa.GenerateKey(rand.Reader, 4096); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	// create the CA
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, caTemplate, &certPrivyKey.PublicKey, ca.PrivateKey)
-	CheckErr(err)
+	if certBytes, err = x509.CreateCertificate(rand.Reader, cert, caTemplate, &certPrivyKey.PublicKey, ca.PrivateKey); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	// pem encode
 	certPEM := new(bytes.Buffer)
-	err = pem.Encode(certPEM, &pem.Block{
+	if err = pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
-	})
-	CheckErr(err)
+	}); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	// caPrivyKey encode
 	var certPrivyKeyPEM = new(bytes.Buffer)
-	err = pem.Encode(certPrivyKeyPEM, &pem.Block{
+	if err = pem.Encode(certPrivyKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivyKey),
-	})
-	CheckErr(err)
+	}); err != nil {
+		CheckErr(err)
+		return "", ""
+	}
 	return certPEM.String(), certPrivyKeyPEM.String()
 }
 
@@ -108,7 +137,8 @@ func domainProcessing(template *x509.Certificate, host string) *x509.Certificate
 		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
 	} else {
 		template.KeyUsage = x509.KeyUsageDigitalSignature
-		for _, v := range strings.Split(host, ",") {
+		// string to []string
+		for _, v := range strings.Split(host, " ") {
 			if ip := net.ParseIP(v); ip != nil {
 				template.IPAddresses = append(template.IPAddresses, ip)
 			} else {
@@ -122,54 +152,60 @@ func domainProcessing(template *x509.Certificate, host string) *x509.Certificate
 	return template
 }
 
-func domainResolution(template *x509.Certificate) string {
-	var host string
+func domainResolution(template *x509.Certificate) (string, string) {
+	var (
+		certCommonName string
+		hostTmp        []string
+	)
+
 	if template.IsCA == true {
-		host = "root"
+		hostTmp = append(hostTmp, "root")
 	} else {
+		// []string to string
 		if template.DNSNames != nil {
 			for _, v := range template.DNSNames {
-				host += " " + v
+				hostTmp = append(hostTmp, v)
 			}
 		}
 		if template.IPAddresses != nil {
 			// []string to string
 			for _, v := range template.IPAddresses {
-				host += " " + v.String()
+				hostTmp = append(hostTmp, v.String())
 			}
 		}
+		if len(template.DNSNames) > 0 {
+			certCommonName = template.DNSNames[0]
+		}
 	}
-	if host == "" {
+	if len(hostTmp) == 0 {
 		CheckErr(errors.New("cert 没有找到IP或者域名"))
+		return "", ""
 	}
-	return host
+	hostTmp2 := strings.Join(hostTmp, " ")
+	return hostTmp2, certCommonName
 }
 
-func ImportQuire(tableName, commonName, host, protocol, data string, certificatePEM, certificatePrivyKeyPEM []byte) {
-	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(tableName, commonName, host, protocol); caStatus == true {
-		CaAdd(tableName, commonName, host, protocol, data, bytes.NewBuffer(certificatePEM), bytes.NewBuffer(certificatePrivyKeyPEM))
-	}
-}
-
-func ImportCert(caPEMFILE, caPrivyKeyPEMFILE string) {
-	if caPEMFILE == "default" && caPrivyKeyPEMFILE == "default" {
+func ImportCert(PEMSQL, PrivyKeyPEMSQL string) {
+	if PEMSQL == "default" || PrivyKeyPEMSQL == "default" {
 		CheckErr(errors.New("没有设置证书内容，请检查证书内容！"))
+		return
 	}
 	// 从网页传过来的数据不存在文件
-	certificatePEM, certificatePrivyKeyPEM := []byte(caPEMFILE), []byte(caPrivyKeyPEMFILE)
-
+	certificatePEM, certificatePrivyKeyPEM := []byte(PEMSQL), []byte(PrivyKeyPEMSQL)
 	_, template := getCertificate(certificatePEM, certificatePrivyKeyPEM)
 	//Warning("证书内容有效!: ", template.Subject.CommonName)
 	// 域名解析处理
-	host = domainResolution(template)
-
-	ImportQuire(template.Issuer.CommonName, template.Subject.CommonName, host, string(template.PublicKeyAlgorithm), template.NotAfter.Format("2006-01-02 15:04:05"), certificatePEM, certificatePrivyKeyPEM)
+	host, _ = domainResolution(template)
+	//var caPEMSQLTmp, caPrivyKeyPEMSQLTmp string
+	if caStatus, _, _ = CaInquire(template.Issuer.CommonName, template.Subject.CommonName, host, template.PublicKeyAlgorithm.String()); caStatus == true {
+		CaAdd(template.Issuer.CommonName, template.Subject.CommonName, host, template.PublicKeyAlgorithm.String(), template.NotAfter.Format("2006-01-02 15:04:05"), string(certificatePEM), string(certificatePrivyKeyPEM))
+	}
 }
 
 func getCertificate(PEM, PrivyKeyPEM []byte) (tls.Certificate, *x509.Certificate) {
 	var ca, err = tls.X509KeyPair(PEM, PrivyKeyPEM)
 	if err != nil {
-		CheckErr(errors.New("证书内容有误，请检查证书内容！"))
+		CheckErr(errors.New("证书内容有误，请检查证书内容！" + err.Error()))
 	}
 	ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0])
 	if err != nil {
@@ -180,19 +216,25 @@ func getCertificate(PEM, PrivyKeyPEM []byte) (tls.Certificate, *x509.Certificate
 
 func WriteCert(caPEM, caPrivyKeyPEM, caPEMFile, caPrivyKeyPEMFile string) {
 	Notice(" 导出证书公钥:       ", caPEMFile)
-	err = ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644)
-	CheckErr(err)
-
+	if err = ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644); err != nil {
+		CheckErr(err)
+		return
+	}
 	Notice(" 导出证书私钥:       ", caPrivyKeyPEMFile+"\n")
-	err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644)
-	CheckErr(err)
+	if err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644); err != nil {
+		CheckErr(err)
+		return
+	}
 }
 
 func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
+	var (
+		resp          *http.Response
+		respBodyBytes []byte
+	)
 	// set up the httptest.Server using our certificate signed by our CA
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintln(w, "Success!")
-		if err != nil {
+		if _, err := fmt.Fprintln(w, "Success!"); err != nil {
 			CheckErr(err)
 			return
 		}
@@ -225,11 +267,15 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	//time.Sleep(time.Second * 10)
 
 	// make a request to the server
-	resp, err := http.Get("https://" + tmpDomain)
-	CheckErr(err)
+	if resp, err = http.Get("https://" + tmpDomain); err != nil {
+		CheckErr(err)
+		return
+	}
 
-	respBodyBytes, err := ioutil.ReadAll(resp.Body)
-	CheckErr(err)
+	if respBodyBytes, err = ioutil.ReadAll(resp.Body); err != nil {
+		CheckErr(err)
+		return
+	}
 	body := strings.TrimSpace(string(respBodyBytes[:]))
 	if body == "Success!" {
 		Warning("证书验证成功!", "")
@@ -239,6 +285,9 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 }
 
 func Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) (string, string, string, string) {
+	var (
+		certpair tls.Certificate
+	)
 	// 预处理用户输入的内容
 	host = strings.Replace(host, ",", " ", -1)
 	// Check whether a certificate exists >>
@@ -258,22 +307,23 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 		certPEMSQL, certPrivyKeyPEMSQL = certSetup(caPEMSQL, caPrivyKeyPEMSQL, certCommonName, certOrganization, country, host)
 		ImportCert(certPEMSQL, certPrivyKeyPEMSQL)
 	}
-	certpair, err := tls.X509KeyPair([]byte(certPEMSQL), []byte(certPrivyKeyPEMSQL))
-	CheckErr(err)
+	if certpair, err = tls.X509KeyPair([]byte(certPEMSQL), []byte(certPrivyKeyPEMSQL)); err != nil {
+		CheckErr(err)
+		return "", "", "", ""
+	}
 	certTLSConf = &tls.Config{
 		Certificates: []tls.Certificate{certpair},
 	}
 	// Get Host
 	_, certTemplate := getCertificate([]byte(certPEMSQL), []byte(certPrivyKeyPEMSQL))
-	host = domainResolution(certTemplate)
-
+	host, certCommonName = domainResolution(certTemplate)
 	// where The Test Was Successful
 	// Verify (ca cert)certificate is ok?
-	if net.ParseIP(host) == nil {
-		VerifyDomainCa(caTLSConf, certTLSConf, host)
+	if certCommonName != "" {
+		VerifyDomainCa(caTLSConf, certTLSConf, certCommonName)
 	} else {
 		// TODO 现在需要设计 验证 跟证书 和 服务证书 之间是否存在证书链接
-		Notice(" 暂时没有IP证书的验证方式,请尝试上传服务器验证", "")
+		Notice("暂时没有IP证书的验证方式,请尝试上传服务器验证", "")
 	}
 	// << Check whether a certificate exists
 	return caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL

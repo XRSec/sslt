@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/gin-gonic/gin"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"sslt/encryption/x509"
+
+	"github.com/fatih/color"
+	"github.com/gin-gonic/gin"
+
 	//"sslt/encryption/sm2"
 	. "sslt/src"
 )
@@ -106,10 +109,14 @@ func api() {
 				}}})
 	})
 	//gin start
-	err := req.Run(":8081")
-	CheckErr(err)
+	if err = req.Run(":8081"); err != nil {
+		CheckErr(err)
+		return
+	}
+
 	// listen and serve on 0.0.0.0:8081
 }
+
 func apiNew(req *gin.Engine) {
 	req.POST("/new", func(context *gin.Context) {
 		err = context.ShouldBind(&New{})
@@ -129,15 +136,13 @@ func apiNew(req *gin.Engine) {
 			if rc == "GTS Root R1" || ro == "Google Trust Services LLC" || sc == "GTS CA 1C3" || so == "Google Trust Services LLC" || c == "US" || h == "localhost" || p == "RSA" {
 				message = "部分参数为默认值, 证书正在生成! 等待证书导出..."
 			}
-			if p == "RSA" {
-				// Generate CA Cert
-				r, rk, s, sk = Server(rc, ro, sc, so, c, h, p)
-			}
+
+			r, rk, s, sk = Server(rc, ro, sc, so, c, h, p)
 			context.JSON(200, gin.H{
 				"Message": message,
 				"Result": gin.H{
 					"Result": gin.H{
-						"Data":         ErrorS(),
+						"Data":         Errors,
 						"CA PEM":       r,
 						"CA KEY PEM":   rk,
 						"CERT PEM":     s,
@@ -183,13 +188,20 @@ func apiImport(req *gin.Engine) {
 			form, _ = context.MultipartForm()
 			for i := range form.File {
 				for f := range form.File[i] {
-					file, err := form.File[i][f].Open()
-					CheckErr(err)
+					var file multipart.File
+					if file, err = form.File[i][f].Open(); err != nil {
+						CheckErr(err)
+						return
+					}
 					buf := bytes.NewBuffer(nil)
-					_, err = io.Copy(buf, file)
-					CheckErr(err)
-					err = file.Close()
-					CheckErr(err)
+					if _, err = io.Copy(buf, file); err != nil {
+						CheckErr(err)
+						return
+					}
+					if err = file.Close(); err != nil {
+						CheckErr(err)
+						return
+					}
 					switch i {
 					case "r":
 						r = buf.String()
@@ -220,12 +232,12 @@ func apiImport(req *gin.Engine) {
 			if r != "" && rk != "" {
 				// IMPORT CA CERTIFICATE
 				message += "CA..."
-				go x509.ImportCert(r, rk)
+				x509.ImportCert(r, rk)
 			}
 			if s != "" && sk != "" {
 				// IMPORT CERT CERTIFICATE
 				message += "SERVER..."
-				go x509.ImportCert(s, sk)
+				x509.ImportCert(s, sk)
 			}
 			if (r != "" && rk == "") || (r == "" && rk != "") || (s != "" && sk == "") || (s == "" && sk != "") {
 				message = "导入证书报错了! 请检查参数是否正确"
@@ -236,7 +248,7 @@ func apiImport(req *gin.Engine) {
 		context.JSON(200, gin.H{
 			"Message": message,
 			"Result": gin.H{
-				"Data": ErrorS(),
+				"Data": Errors,
 			},
 			"Version": version,
 			"Arguments": gin.H{
@@ -296,7 +308,7 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 	context.JSON(200, gin.H{
 		"Message": message,
 		"Result": gin.H{
-			"Data":    ErrorS(),
+			"Data":    Errors,
 			"Version": version,
 			"Arguments": gin.H{
 				"r":  caPEM,
