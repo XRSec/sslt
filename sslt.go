@@ -1,6 +1,8 @@
 package main
 
+import "C"
 import (
+	"archive/zip"
 	"bytes"
 	"flag"
 	"fmt"
@@ -22,6 +24,7 @@ var (
 	help, v                                        bool
 	err                                            error
 	caPEM, caPrivyKeyPEM, certPEM, certPrivyKeyPEM *bytes.Buffer
+	ErrorsData                                     map[string]string
 )
 
 type Import struct {
@@ -41,7 +44,14 @@ type New struct {
 }
 
 func init() {
-	HappyLogo()
+	color.Green("\033[H\033[2J -------------------------------\n")
+	color.Cyan("   _____   _____  .      _______")
+	color.Blue("  (       (      /     '   /   ")
+	color.Red("   `--.    `--.  |         |   ")
+	color.Magenta("      |       |  |         |   ")
+	color.Yellow(" \\___.'  \\___.'  /---/     /   \n")
+	flag.BoolVar(&help, "help", false, "Display help information")
+	flag.BoolVar(&v, "v", false, "sslt version")
 }
 
 func Server(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) (string, string, string, string) {
@@ -55,7 +65,7 @@ func Server(caCommonName, caOrganization, certCommonName, certOrganization, coun
 
 func api() {
 	req := gin.Default()
-	Errors = make(map[string]string)
+	ErrorsData := make(map[string]string)
 	req.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"Message": "Home",
@@ -85,7 +95,7 @@ func api() {
 			p = context.DefaultPostForm("p", "RSA")
 			apiDownload(rc, ro, sc, so, c, h, p, context)
 		}
-		Errors = make(map[string]string)
+		ErrorsData = make(map[string]string)
 	})
 	req.GET("/help", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -136,8 +146,9 @@ func apiNew(req *gin.Engine) {
 			if rc == "GTS Root R1" || ro == "Google Trust Services LLC" || sc == "GTS CA 1C3" || so == "Google Trust Services LLC" || c == "US" || h == "localhost" || p == "RSA" {
 				message = "部分参数为默认值, 证书正在生成! 等待证书导出..."
 			}
-
 			r, rk, s, sk = Server(rc, ro, sc, so, c, h, p)
+			context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.zip", Rename(rc)))
+			compress(context, r, rk, s, sk, rc, sc)
 			context.JSON(200, gin.H{
 				"Message": message,
 				"Result": gin.H{
@@ -161,7 +172,7 @@ func apiNew(req *gin.Engine) {
 				},
 			})
 		}
-		Errors = make(map[string]string)
+		ErrorsData = make(map[string]string)
 	})
 	req.GET("/new", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -258,7 +269,7 @@ func apiImport(req *gin.Engine) {
 				"sk": sk,
 			},
 		})
-		Errors = make(map[string]string)
+		ErrorsData = make(map[string]string)
 	})
 	req.GET("/import", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -285,9 +296,9 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 		message = "CA证书正在导入! 等待数据库更新..."
 		caPEM = bytes.NewBuffer([]byte(caPEMSQL))
 		caPrivyKeyPEM = bytes.NewBuffer([]byte(caPrivyKeyPEMSQL))
-		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.pem", Rename(rc)))
-		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.key.pem", Rename(rc)))
+		context.Writer.Header().Add("Content-Disposition", "attachment; filename=certs.zip")
 		context.Data(http.StatusOK, "application/octet-stream", []byte(caPrivyKeyPEMSQL))
+
 		context.Data(http.StatusOK, "application/octet-stream", []byte(caPEMSQL))
 
 	} else {
@@ -308,7 +319,7 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 	context.JSON(200, gin.H{
 		"Message": message,
 		"Result": gin.H{
-			"Data":    Errors,
+			"Data":    ErrorsData,
 			"Version": version,
 			"Arguments": gin.H{
 				"r":  caPEM,
@@ -318,6 +329,30 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 			},
 		},
 	})
+}
+
+func compress(compress *gin.Context, r, rk, s, sk, rc, sc string) {
+	//tar r rk s sk
+	ar := zip.NewWriter(compress.Writer)
+	f1, _ := ar.Create(Rename(rc) + ".pem")
+	if _, err = io.Copy(f1, bytes.NewBuffer([]byte(r))); err != nil {
+		CheckErr(err)
+	}
+	f2, _ := ar.Create(Rename(rc) + ".key.pem")
+	if _, err = io.Copy(f2, bytes.NewBuffer([]byte(rk))); err != nil {
+		CheckErr(err)
+	}
+	f3, _ := ar.Create(Rename(sc) + ".pem")
+	if _, err = io.Copy(f3, bytes.NewBuffer([]byte(s))); err != nil {
+		CheckErr(err)
+	}
+	f4, _ := ar.Create(Rename(sc) + ".key.pem")
+	if _, err = io.Copy(f4, bytes.NewBuffer([]byte(sk))); err != nil {
+		CheckErr(err)
+	}
+	if err = ar.Close(); err != nil {
+		CheckErr(err)
+	}
 }
 
 func main() {

@@ -279,8 +279,10 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	body := strings.TrimSpace(string(respBodyBytes[:]))
 	if body == "Success!" {
 		Warning("证书验证成功!", "")
+		return
 	} else {
 		CheckErr(errors.New("证书验证失败!"))
+		return
 	}
 }
 

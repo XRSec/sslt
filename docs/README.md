@@ -34,30 +34,8 @@
  \___.'  \___.'  /---/     /
  ----------------------
 Usage of sslt:
-  -c string
-        Specified Country (default "US")
-  -h string
-        Specified domain name (default "localhost")
   -help
         Display help information
-  -p string
-        Specified encryption protocol (default "rsa")
-  -r string
-        Import CA (default "default")
-  -rc string
-        Specified Root CommonName (default "GTS Root R1")
-  -rk string
-        Import CA Key (default "default")
-  -ro string
-        Specified Root Organization (default "Google Trust Services LLC")
-  -s string
-        Import Server (default "default")
-  -sc string
-        Specified Server CommonName (default "GTS CA 1C3")
-  -sk string
-        Import Server Key (default "default")
-  -so string
-        Specified Server Organization (default "Google Trust Services LLC")
   -v    sslt version
  -------------------------------
 ```

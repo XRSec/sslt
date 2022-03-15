@@ -1,22 +1,25 @@
 package src
 
 import (
-	"github.com/fatih/color"
 	"path"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 var (
 	Errors map[string]string
-	Quit   chan struct{}
 	//	notice  = color.New(color.FgBlue).PrintfFunc()
 	//	warning = color.New(color.FgYellow).PrintfFunc()
 	//	errors  = color.New(color.FgRed).PrintfFunc()
 	//	succee  = color.New(color.FgGreen).PrintfFunc()
 )
 
+func init() {
+	Errors = make(map[string]string)
+}
 func HappyLogo() {
 	color.Green("\033[H\033[2J -------------------------------\n")
 	color.Cyan("   _____   _____  .      _______")
@@ -29,9 +32,9 @@ func HappyLogo() {
 func CheckErr(err error) {
 	if err != nil {
 		pc, file, line, _ := runtime.Caller(1)
-		color.New(color.FgRed).PrintfFunc()(" [sslt]")
+		color.New(color.FgRed).PrintfFunc()(" [sslt] ")
 		color.New(color.FgMagenta).PrintfFunc()("%v:", time.Now().Format("15:04:05.00000"))
-		color.New(color.FgGreen).PrintfFunc()("%v] %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
+		color.New(color.FgGreen).PrintfFunc()("%v %v:%v:", path.Ext(runtime.FuncForPC(pc).Name())[1:], path.Base(file), line)
 		color.Yellow(" %v", err)
 		Errors["sslt "+time.Now().Format("15:04:05.00000")+" "+path.Ext(runtime.FuncForPC(pc).Name())[1:]+" "+path.Base(file)+":"+strconv.Itoa(line)] = err.Error()
 	}
