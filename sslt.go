@@ -16,32 +16,32 @@ import (
 
 	//"sslt/encryption/sm2"
 	. "sslt/src"
+	. "sslt/web/router"
 )
 
 var (
-	r, rk, rc, ro, s, sk, sc, so, c, h, p          string
-	buildTime, commitId, version, author           string
-	help, v                                        bool
-	err                                            error
-	caPEM, caPrivyKeyPEM, certPEM, certPrivyKeyPEM *bytes.Buffer
-	ErrorsData                                     map[string]string
-)
+	err error
 
-type Import struct {
-	r  string
-	rk string
-	s  string
-	sk string
-}
-type New struct {
-	ro string
-	rc string
-	so string
-	sc string
-	c  string
-	h  string
-	p  string
-}
+	// CA Root Certificates
+	caCommonName, caOrganization, caOrganizationalUnit, caSerialNumber string
+	caLocality, caProvince, caStreetAddress, caPostalCode              []string
+	caPEM, caPrivyKeyPEM                                               *bytes.Buffer
+
+	// CERT Certificate
+	certCommonName, certOrganization, certOrganizationalUnit, certSerialNumber string
+	certLocality, certProvince, certStreetAddress, certPostalCode              []string
+	certPEM, certPrivyKeyPEM                                                   *bytes.Buffer
+
+	// General Certificate Information
+	country, host, protocol string
+
+	// System parameters
+	buildTime, commitId, version, author string
+	help, v                              bool
+
+	// ErrorsData Log Storage Map
+	ErrorsData map[string]string
+)
 
 func init() {
 	color.Green("\033[H\033[2J -------------------------------\n")
@@ -59,11 +59,14 @@ func Server(caCommonName, caOrganization, certCommonName, certOrganization, coun
 	if protocol == "RSA" {
 		// Generate CA
 		r, rk, s, sk = x509.Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol)
+	} else if protocol == "SM2" {
+		// TODO SM2
+		return "", "", "", ""
 	}
 	return r, rk, s, sk
 }
 
-func api() {
+func ginServer() {
 	req := gin.Default()
 	ErrorsData := make(map[string]string)
 	req.GET("/", func(c *gin.Context) {
@@ -86,14 +89,14 @@ func api() {
 				"Message": "导入证书报错了! 请检查参数是否正确",
 			})
 		} else {
-			rc = context.DefaultPostForm("rc", "GTS Root R1")
-			ro = context.DefaultPostForm("ro", "Google Trust Services LLC")
-			sc = context.DefaultPostForm("sc", "GTS CA 1C3")
-			so = context.DefaultPostForm("so", "Google Trust Services LLC")
-			c = context.DefaultPostForm("c", "US")
-			h = context.DefaultPostForm("h", "localhost")
-			p = context.DefaultPostForm("p", "RSA")
-			apiDownload(rc, ro, sc, so, c, h, p, context)
+			caCommonName = context.DefaultPostForm("caCommonName", "GTS Root R1")
+			caOrganization = context.DefaultPostForm("caOrganization", "Google Trust Services LLC")
+			certCommonName = context.DefaultPostForm("certCommonName", "GTS CA 1C3")
+			certOrganization = context.DefaultPostForm("certOrganization", "Google Trust Services LLC")
+			country = context.DefaultPostForm("country", "US")
+			host = context.DefaultPostForm("host", "localhost")
+			protocol = context.DefaultPostForm("protocol", "RSA")
+			apiDownload(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol, context)
 		}
 		ErrorsData = make(map[string]string)
 	})
@@ -104,18 +107,18 @@ func api() {
 				"-X":       "POST",
 				"--header": "Authorization Bearer TOKEN",
 				"--data": gin.H{
-					"req":  "ca.crt_content",
-					"rk":   "ca.key.crt_content",
-					"s":    "server.crt_content",
-					"sk":   "server.key.crt_content",
-					"rc":   "Specified Root CommonName",
-					"ro":   "Specified Root Organization",
-					"sc":   "Specified Server CommonName",
-					"so":   "Specified Server Organization",
-					"c":    "Specified Country",
-					"h":    "Specified domain name",
-					"p":    "Specified encryption protocol",
-					"help": "Display help information",
+					"req":              "ca.crt_content",
+					"caKeyPEM":         "ca.key.crt_content",
+					"certPEM":          "server.crt_content",
+					"certKeyPEM":       "server.key.crt_content",
+					"caCommonName":     "Specified Root CommonName",
+					"caOrganization":   "Specified Root Organization",
+					"certCommonName":   "Specified Server CommonName",
+					"certOrganization": "Specified Server Organization",
+					"country":          "Specified Country",
+					"host":             "Specified domain name",
+					"protocol":         "Specified encryption protocol",
+					"help":             "Display help information",
 				}}})
 	})
 	//gin start
@@ -135,39 +138,39 @@ func apiNew(req *gin.Engine) {
 				"Message": "生成证书报错了! 请检查参数是否正确",
 			})
 		} else {
-			rc = context.DefaultPostForm("rc", "GTS Root R1")
-			ro = context.DefaultPostForm("ro", "Google Trust Services LLC")
-			sc = context.DefaultPostForm("sc", "GTS CA 1C3")
-			so = context.DefaultPostForm("so", "Google Trust Services LLC")
-			c = context.DefaultPostForm("c", "US")
-			h = context.DefaultPostForm("h", "localhost")
-			p = context.DefaultPostForm("p", "RSA")
+			caCommonName = context.DefaultPostForm("caCommonName", "GTS Root R1")
+			caOrganization = context.DefaultPostForm("caOrganization", "Google Trust Services LLC")
+			certCommonName = context.DefaultPostForm("certCommonName", "GTS CA 1C3")
+			certOrganization = context.DefaultPostForm("certOrganization", "Google Trust Services LLC")
+			country = context.DefaultPostForm("country", "US")
+			host = context.DefaultPostForm("host", "localhost")
+			protocol = context.DefaultPostForm("protocol", "RSA")
 			var message = "证书正在生成! 等待证书导出..."
-			if rc == "GTS Root R1" || ro == "Google Trust Services LLC" || sc == "GTS CA 1C3" || so == "Google Trust Services LLC" || c == "US" || h == "localhost" || p == "RSA" {
+			if caCommonName == "GTS Root R1" || caOrganization == "Google Trust Services LLC" || certCommonName == "GTS CA 1C3" || certOrganization == "Google Trust Services LLC" || country == "US" || host == "localhost" || protocol == "RSA" {
 				message = "部分参数为默认值, 证书正在生成! 等待证书导出..."
 			}
-			r, rk, s, sk = Server(rc, ro, sc, so, c, h, p)
-			context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.zip", Rename(rc)))
-			compress(context, r, rk, s, sk, rc, sc)
+			caPEM, rk, s, sk = Server(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol)
+			context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%certPEM.zip", Rename(caCommonName)))
+			compress(context, caPEM, rk, s, sk, caCommonName, certCommonName)
 			context.JSON(200, gin.H{
 				"Message": message,
 				"Result": gin.H{
 					"Result": gin.H{
 						"Data":         Errors,
-						"CA PEM":       r,
+						"CA PEM":       caPEM,
 						"CA KEY PEM":   rk,
 						"CERT PEM":     s,
 						"CERT KEY PEM": sk,
 					},
 					"Version": version,
 					"Arguments": gin.H{
-						"rc": rc,
-						"ro": ro,
-						"sc": sc,
-						"so": so,
-						"c":  c,
-						"h":  h,
-						"p":  p,
+						"caCommonName":     caCommonName,
+						"caOrganization":   caOrganization,
+						"certCommonName":   certCommonName,
+						"certOrganization": certOrganization,
+						"country":          country,
+						"host":             host,
+						"protocol":         protocol,
 					},
 				},
 			})
@@ -181,13 +184,13 @@ func apiNew(req *gin.Engine) {
 				"-X":       "POST",
 				"--header": "Authorization Bearer TOKEN",
 				"--data": gin.H{
-					"rc": "Specified Root CommonName",
-					"ro": "Specified Root Organization",
-					"sc": "Specified Server CommonName",
-					"so": "Specified Server Organization",
-					"c":  "Specified Country",
-					"h":  "Specified domain name",
-					"p":  "Specified encryption protocol",
+					"caCommonName":     "Specified Root CommonName",
+					"caOrganization":   "Specified Root Organization",
+					"certCommonName":   "Specified Server CommonName",
+					"certOrganization": "Specified Server Organization",
+					"country":          "Specified Country",
+					"host":             "Specified domain name",
+					"protocol":         "Specified encryption protocol",
 				}}})
 	})
 }
@@ -214,13 +217,13 @@ func apiImport(req *gin.Engine) {
 						return
 					}
 					switch i {
-					case "r":
-						r = buf.String()
-					case "rk":
+					case "caPEM":
+						caPEM = buf.String()
+					case "caKeyPEM":
 						rk = buf.String()
-					case "s":
+					case "certPEM":
 						s = buf.String()
-					case "sk":
+					case "certKeyPEM":
 						sk = buf.String()
 					}
 				}
@@ -232,25 +235,25 @@ func apiImport(req *gin.Engine) {
 					"Message": "导入证书报错了! 请检查参数是否正确",
 				})
 			} else {
-				r = context.DefaultPostForm("r", "default")
-				rk = context.DefaultPostForm("rk", "default")
-				s = context.DefaultPostForm("s", "default")
-				sk = context.DefaultPostForm("sk", "default")
+				caPEM = context.DefaultPostForm("caPEM", "default")
+				rk = context.DefaultPostForm("caKeyPEM", "default")
+				s = context.DefaultPostForm("certPEM", "default")
+				sk = context.DefaultPostForm("certKeyPEM", "default")
 			}
 		}
 		var message = "正在导入证书:"
-		if r != "" || s != "" {
-			if r != "" && rk != "" {
+		if caPEM != "" || s != "" {
+			if caPEM != "" && rk != "" {
 				// IMPORT CA CERTIFICATE
 				message += "CA..."
-				x509.ImportCert(r, rk)
+				x509.ImportCert(caPEM, rk)
 			}
 			if s != "" && sk != "" {
 				// IMPORT CERT CERTIFICATE
 				message += "SERVER..."
 				x509.ImportCert(s, sk)
 			}
-			if (r != "" && rk == "") || (r == "" && rk != "") || (s != "" && sk == "") || (s == "" && sk != "") {
+			if (caPEM != "" && rk == "") || (caPEM == "" && rk != "") || (s != "" && sk == "") || (s == "" && sk != "") {
 				message = "导入证书报错了! 请检查参数是否正确"
 			}
 		} else {
@@ -263,10 +266,10 @@ func apiImport(req *gin.Engine) {
 			},
 			"Version": version,
 			"Arguments": gin.H{
-				"r":  r,
-				"rk": rk,
-				"s":  s,
-				"sk": sk,
+				"caPEM":      caPEM,
+				"caKeyPEM":   rk,
+				"certPEM":    s,
+				"certKeyPEM": sk,
 			},
 		})
 		ErrorsData = make(map[string]string)
@@ -278,10 +281,10 @@ func apiImport(req *gin.Engine) {
 				"-X":       "POST",
 				"--header": "Authorization Bearer TOKEN",
 				"--data": gin.H{
-					"req": "ca.crt_content",
-					"rk":  "ca.key.crt_content",
-					"s":   "server.crt_content",
-					"sk":  "server.key.crt_content",
+					"req":        "ca.crt_content",
+					"caKeyPEM":   "ca.key.crt_content",
+					"certPEM":    "server.crt_content",
+					"certKeyPEM": "server.key.crt_content",
 				}}})
 	})
 }
@@ -310,8 +313,8 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 		message = "CA证书正在导入! 等待数据库更新..."
 		certPEM = bytes.NewBuffer([]byte(certPEMSQL))
 		certPrivyKeyPEM = bytes.NewBuffer([]byte(certPrivyKeyPEMSQL))
-		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.pem", Rename(sc)))
-		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%s.key.pem", Rename(sc)))
+		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%certPEM.pem", Rename(sc)))
+		context.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment;filename=%certPEM.key.pem", Rename(sc)))
 	} else {
 		// todo 数据库没找到
 		fmt.Println(certPEM, certPrivyKeyPEM)
@@ -322,17 +325,17 @@ func apiDownload(rc, ro, sc, so, c, h, p string, context *gin.Context) {
 			"Data":    ErrorsData,
 			"Version": version,
 			"Arguments": gin.H{
-				"r":  caPEM,
-				"rk": caPrivyKeyPEM,
-				"s":  certPEM,
-				"sk": certPrivyKeyPEM,
+				"caPEM":      caPEM,
+				"caKeyPEM":   caPrivyKeyPEM,
+				"certPEM":    certPEM,
+				"certKeyPEM": certPrivyKeyPEM,
 			},
 		},
 	})
 }
 
 func compress(compress *gin.Context, r, rk, s, sk, rc, sc string) {
-	//tar r rk s sk
+	//tar caPEM caKeyPEM certPEM certKeyPEM
 	ar := zip.NewWriter(compress.Writer)
 	f1, _ := ar.Create(Rename(rc) + ".pem")
 	if _, err = io.Copy(f1, bytes.NewBuffer([]byte(r))); err != nil {
@@ -373,6 +376,12 @@ func main() {
 		return
 	}
 	// << Start by identifying the functionality the user needs
-	// api
-	api()
+	// ginServer
+	ginServer()
+}
+
+func ginweb() {
+	req := gin.Default()
+	req.Group("v1").Use(GinValue())
+	req.Run(":8081")
 }
