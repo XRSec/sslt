@@ -4,3 +4,4 @@ sslt/
 .DS_Store
 .idea
 bin
+init/.tmp

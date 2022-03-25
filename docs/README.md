@@ -28,14 +28,67 @@
 ➜  ~ ./sslt -help
  -------------------------------
    _____   _____  .      _______
-  (       (      /     '   /
-   `--.    `--.  |         |
-      |       |  |         |
- \___.'  \___.'  /---/     /
- ----------------------
+  (       (      /     '   /   
+   `--.    `--.  |         |   
+      |       |  |         |   
+ \___.'  \___.'  /---/     /   
+ ----------------------     
 Usage of sslt:
+  -api
+        sslt api
+  -c string
+        Specified Country (default "US")
+  -h    Display help information
   -help
         Display help information
+  -host string
+        Specified domain name (default "localhost")
+  -p string
+        Specified encryption protocol (default "rsa")
+  -r string
+        Import CA (default "sslt/ca.pem")
+  -rc string
+        Specified Root CommonName (default "GTS Root R1")
+  -rk string
+        Import CA Key (default "sslt/ca.key.pe")
+  -rlc string
+        Specified Root Locality
+  -rna string
+        Specified Root NotAfter
+  -ro string
+        Specified Root Organization (default "Google Trust Services LLC")
+  -rou string
+        Specified Root OrganizationalUnit
+  -rpc string
+        Specified Root PostalCode
+  -rpr string
+        Specified Root Province
+  -rsn string
+        Specified Root SerialNumber
+  -rst string
+        Specified Root StreetAddress
+  -s string
+        Import Cert CA (default "sslt/server.pem")
+  -sc string
+        Specified Server CommonName (default "GTS CA 1C3")
+  -sk string
+        Import Cert CA Key (default "sslt/server.key.pe")
+  -slc string
+        Specified Server Locality
+  -sna string
+        Specified Server NotAfter
+  -so string
+        Specified Server Organization (default "Google Trust Services LLC")
+  -sou string
+        Specified Server OrganizationalUnit
+  -spc string
+        Specified Server PostalCode
+  -spr string
+        Specified Server Province
+  -ssn string
+        Specified Server SerialNumber
+  -sst string
+        Specified Server StreetAddress
   -v    sslt version
  -------------------------------
 ```

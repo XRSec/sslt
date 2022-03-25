@@ -11,12 +11,16 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/spf13/viper"
 	"io/ioutil"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	. "sslt/src"
+	. "sslt/src/data"
+	. "sslt/src/db"
+	. "sslt/src/log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,31 +29,92 @@ var (
 	err                                                              error
 	caStatus, certStatus                                             bool
 	caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL, host string
-	caTLSConf, certTLSConf                                           *tls.Config
 )
 
-func certificateTemplate(templateCommonName, templateOrganization, templateCountry, host string, notAfterYear int, isCA bool) *x509.Certificate {
+func certificateTemplate(CommonName, Organization, OrganizationalUnit, SerialNumber, StreetAddress, PostalCode, Locality, Province, NotAfter, Country, host string, isCA bool) *x509.Certificate {
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(int64(time.Now().Year())),
 		Subject: pkix.Name{
-			CommonName:   templateCommonName,
-			Organization: []string{templateOrganization},
-			Country:      []string{templateCountry},
+			CommonName:   CommonName,
+			Organization: []string{Organization},
+			Country:      []string{Country},
 		},
 		NotBefore: time.Now(),
-		NotAfter:  time.Now().AddDate(notAfterYear, 0, 0),
 		//SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		IsCA:                  isCA,
 		BasicConstraintsValid: isCA,
 	}
 
 	// IP，DNS, CommonName参数
-	template = domainProcessing(template, host)
+	if template.IsCA {
+		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
+	} else {
+		template.KeyUsage = x509.KeyUsageDigitalSignature
+		// string to []string
+		for _, v := range strings.Split(host, " ") {
+			if ip := net.ParseIP(v); ip != nil {
+				template.IPAddresses = append(template.IPAddresses, ip)
+			} else {
+				template.DNSNames = append(template.DNSNames, v)
+			}
+		}
+		if len(template.DNSNames) > 0 {
+			template.Subject.CommonName = template.DNSNames[0]
+		}
+	}
+	// ARGS 参数
+	if OrganizationalUnit == "" {
+		template.Subject.OrganizationalUnit = nil
+	} else {
+		template.Subject.OrganizationalUnit = []string{OrganizationalUnit}
+	}
+	if Locality == "" {
+		template.Subject.Locality = nil
+	} else {
+		template.Subject.Locality = []string{Locality}
+	}
+	if Province == "" {
+		template.Subject.Province = nil
+	} else {
+		template.Subject.Province = []string{Province}
+	}
+	if StreetAddress == "" {
+		template.Subject.StreetAddress = nil
+	} else {
+		template.Subject.StreetAddress = []string{StreetAddress}
+	}
+	if PostalCode == "" {
+		template.Subject.PostalCode = nil
+	} else {
+		template.Subject.PostalCode = []string{PostalCode}
+	}
+	if SerialNumber == "" {
+		template.SerialNumber = big.NewInt(int64(time.Now().Year()))
+	} else {
+		var tmpSerialNumber int64
+		if tmpSerialNumber, err = strconv.ParseInt(SerialNumber, 10, 64); err != nil {
+			CheckErr(err)
+		}
+		template.SerialNumber = big.NewInt(tmpSerialNumber)
+	}
+	if NotAfter == "" {
+		if template.IsCA {
+			template.NotAfter = time.Now().AddDate(10, 0, 0)
+		} else {
+			template.NotAfter = time.Now().AddDate(2, 0, 0)
+		}
+	} else {
+		var tmpNotAfter int
+		if tmpNotAfter, err = strconv.Atoi(NotAfter); err != nil {
+			CheckErr(err)
+		}
+		template.NotAfter = time.Now().AddDate(tmpNotAfter, 0, 0)
+	}
 	return template
 }
 
-func caSetup(caCommonName, caOrganization, country string) (string, string) {
-	ca := certificateTemplate(caCommonName, caOrganization, country, "", 10, true)
+func caSetup(caCommonName, caOrganization, caOrganizationalUnit, caSerialNumber, caStreetAddress, caPostalCode, caLocality, caProvince, caNotAfter, country string) (string, string) {
+	ca := certificateTemplate(caCommonName, caOrganization, caOrganizationalUnit, caSerialNumber, caStreetAddress, caPostalCode, caLocality, caProvince, caNotAfter, country, "", true)
 	// set up our CA certificate
 	// create our private and public key
 	var (
@@ -89,7 +154,7 @@ func caSetup(caCommonName, caOrganization, country string) (string, string) {
 	return caPEM.String(), caPrivyKeyPEM.String()
 }
 
-func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, country, host string) (string, string) {
+func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, certOrganizationalUnit, certSerialNumber, certStreetAddress, certPostalCode, certLocality, certProvince, certNotAfter, country, host string) (string, string) {
 	// Parsing ca configuration
 	var (
 		ca           tls.Certificate
@@ -99,7 +164,7 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 	)
 	ca, caTemplate = getCertificate([]byte(caPEMSQL), []byte(CaPrivyKeyPEMSQL))
 	// set up our server certificate
-	cert := certificateTemplate(certCommonName, certOrganization, country, host, 2, false)
+	cert := certificateTemplate(certCommonName, certOrganization, certOrganizationalUnit, certSerialNumber, certStreetAddress, certPostalCode, certLocality, certProvince, certNotAfter, country, host, false)
 	// create our private and public key
 	if certPrivyKey, err = rsa.GenerateKey(rand.Reader, 4096); err != nil {
 		CheckErr(err)
@@ -129,27 +194,6 @@ func certSetup(caPEMSQL, CaPrivyKeyPEMSQL, certCommonName, certOrganization, cou
 		return "", ""
 	}
 	return certPEM.String(), certPrivyKeyPEM.String()
-}
-
-func domainProcessing(template *x509.Certificate, host string) *x509.Certificate {
-	// IP，DNS, CommonName参数
-	if template.IsCA {
-		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
-	} else {
-		template.KeyUsage = x509.KeyUsageDigitalSignature
-		// string to []string
-		for _, v := range strings.Split(host, " ") {
-			if ip := net.ParseIP(v); ip != nil {
-				template.IPAddresses = append(template.IPAddresses, ip)
-			} else {
-				template.DNSNames = append(template.DNSNames, v)
-			}
-		}
-		if len(template.DNSNames) > 0 {
-			template.Subject.CommonName = template.DNSNames[0]
-		}
-	}
-	return template
 }
 
 func domainResolution(template *x509.Certificate) (string, string) {
@@ -186,7 +230,7 @@ func domainResolution(template *x509.Certificate) (string, string) {
 }
 
 func ImportCert(PEMSQL, PrivyKeyPEMSQL string) {
-	if PEMSQL == "default" || PrivyKeyPEMSQL == "default" {
+	if PEMSQL == "" || PrivyKeyPEMSQL == "" {
 		CheckErr(errors.New("没有设置证书内容，请检查证书内容！"))
 		return
 	}
@@ -212,19 +256,6 @@ func getCertificate(PEM, PrivyKeyPEM []byte) (tls.Certificate, *x509.Certificate
 		CheckErr(errors.New("证书内容有误，请检查证书内容！"))
 	}
 	return ca, ca.Leaf
-}
-
-func WriteCert(caPEM, caPrivyKeyPEM, caPEMFile, caPrivyKeyPEMFile string) {
-	Notice(" 导出证书公钥:       ", caPEMFile)
-	if err = ioutil.WriteFile(caPEMFile, []byte(caPEM), 0644); err != nil {
-		CheckErr(err)
-		return
-	}
-	Notice(" 导出证书私钥:       ", caPrivyKeyPEMFile+"\n")
-	if err = ioutil.WriteFile(caPrivyKeyPEMFile, []byte(caPrivyKeyPEM), 0644); err != nil {
-		CheckErr(err)
-		return
-	}
 }
 
 func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
@@ -278,7 +309,7 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	}
 	body := strings.TrimSpace(string(respBodyBytes[:]))
 	if body == "Success!" {
-		Warning("证书验证成功!", "")
+		Warning("证书验证: ", "成功!")
 		return
 	} else {
 		CheckErr(errors.New("证书验证失败!"))
@@ -286,17 +317,18 @@ func VerifyDomainCa(caTLSConf, certTLSConf *tls.Config, host string) {
 	}
 }
 
-func Setup(caCommonName, caOrganization, certCommonName, certOrganization, country, host, protocol string) (string, string, string, string) {
+func Setup(caOrganization, caCommonName, caOrganizationalUnit, caSerialNumber, caStreetAddress, caPostalCode, caLocality, caProvince, caNotAfter, certOrganization, certCommonName, certOrganizationalUnit, certSerialNumber, certStreetAddress, certPostalCode, certLocality, certProvince, certNotAfter, country, host, protocol string, api bool) (string, string, string, string) {
 	var (
-		certpair tls.Certificate
+		certpair               tls.Certificate
+		caTLSConf, certTLSConf *tls.Config
 	)
 	// 预处理用户输入的内容
 	host = strings.Replace(host, ",", " ", -1)
-	// Check whether a certificate exists >>
-	// CA Generate
+	// 检查证书是否存在 >>
+	// CA 生成
 	if caStatus, caPEMSQL, caPrivyKeyPEMSQL = CaInquire(caCommonName, caCommonName, "root", protocol); caStatus == true {
-		//Notice("生成证书字段:", "「CA CommonName: "+caCommonName+"」「CA Organization: "+caCommonName+"」「Protocol: "+protocol+"」")
-		caPEMSQL, caPrivyKeyPEMSQL = caSetup(caCommonName, caOrganization, country)
+		Notice("生成证书字段:", "「CA CommonName: "+caCommonName+"」「CA Organization: "+caCommonName+"」「Protocol: "+protocol+"」")
+		caPEMSQL, caPrivyKeyPEMSQL = caSetup(caCommonName, caOrganization, caOrganizationalUnit, caSerialNumber, caStreetAddress, caPostalCode, caLocality, caProvince, caNotAfter, country)
 		ImportCert(caPEMSQL, caPrivyKeyPEMSQL)
 	}
 	caPool := x509.NewCertPool()
@@ -306,7 +338,7 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 	}
 	// SERVER Generate
 	if certStatus, certPEMSQL, certPrivyKeyPEMSQL = CaInquire(certCommonName, certCommonName, host, protocol); certStatus == true {
-		certPEMSQL, certPrivyKeyPEMSQL = certSetup(caPEMSQL, caPrivyKeyPEMSQL, certCommonName, certOrganization, country, host)
+		certPEMSQL, certPrivyKeyPEMSQL = certSetup(caPEMSQL, caPrivyKeyPEMSQL, certCommonName, certOrganization, certOrganizationalUnit, certSerialNumber, certStreetAddress, certPostalCode, certLocality, certProvince, certNotAfter, country, host)
 		ImportCert(certPEMSQL, certPrivyKeyPEMSQL)
 	}
 	if certpair, err = tls.X509KeyPair([]byte(certPEMSQL), []byte(certPrivyKeyPEMSQL)); err != nil {
@@ -325,8 +357,14 @@ func Setup(caCommonName, caOrganization, certCommonName, certOrganization, count
 		VerifyDomainCa(caTLSConf, certTLSConf, certCommonName)
 	} else {
 		// TODO 现在需要设计 验证 跟证书 和 服务证书 之间是否存在证书链接
-		Notice("暂时没有IP证书的验证方式,请尝试上传服务器验证", "")
+		Notice("暂时没有IP证书的验证方式,请尝试上传服务器验证: ", certCommonName)
 	}
-	// << Check whether a certificate exists
+	// 写入证书
+	if !api {
+		var rootPath = viper.Get("rootPath").(string)
+		WriteCert(caPEMSQL, caPrivyKeyPEMSQL, rootPath+caCommonName+".pem", rootPath+caCommonName+".key.pem")
+		WriteCert(certPEMSQL, certPrivyKeyPEMSQL, rootPath+certCommonName+".pem", rootPath+certCommonName+".key.pem")
+	}
+	// << 检查证书是否存在
 	return caPEMSQL, caPrivyKeyPEMSQL, certPEMSQL, certPrivyKeyPEMSQL
 }

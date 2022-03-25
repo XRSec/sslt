@@ -3,22 +3,23 @@ package src
 import (
 	"errors"
 	"fmt"
+	"github.com/spf13/viper"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"os"
 	"strconv"
 	"strings"
-	//"gorm.io/gorm/logger"
-	"os"
+
+	. "sslt/src/data"
+	. "sslt/src/log"
 	"time"
 )
 
 var (
-	err            error
-	db             *gorm.DB
-	ShellFolder, _ = os.Getwd()
-	RootPath       = ShellFolder + "/sslt/"
-	sqliteMaster   SqliteMaster
-	certs          Certs
+	err          error
+	db           *gorm.DB
+	sqliteMaster SqliteMaster
+	certs        Certs
 )
 
 type Certs struct {
@@ -44,14 +45,14 @@ type Product struct {
 }
 
 func init() {
-	if _, err = os.Stat(RootPath); err != nil {
-		if err = os.Mkdir(RootPath, os.ModePerm); err != nil {
+	var rootPath = viper.Get("rootPath").(string)
+	if _, err = os.Stat(rootPath); err != nil {
+		if err = os.Mkdir(rootPath, os.ModePerm); err != nil {
 			CheckErr(errors.New("创建目录失败"))
 			return
 		}
 	}
-	//color.Red("[*] Debug mode is on")
-	if db, err = gorm.Open(sqlite.Open(RootPath+"sslt.db"), &gorm.Config{
+	if db, err = gorm.Open(sqlite.Open(rootPath+"sslt.db"), &gorm.Config{
 		//Logger: logger.Default.LogMode(logger.Info),
 	}); err != nil {
 		CheckErr(err)
@@ -59,11 +60,6 @@ func init() {
 	}
 }
 
-func Rename(oldname string) string {
-	oldname = strings.Replace(oldname, " ", "_", -1)
-	return oldname
-
-}
 func CaAdd(tableName, commonName, host, protocol, data, caPEM, caPrivyKeyPEM string) (string, string) {
 	// 如果存在证书则退出
 	//if certStatus, CaPEMSQL, CaPrivyKeyPEMSQL := CaInquire(tableName, commonName, host, protocol); certStatus == false {
@@ -90,15 +86,17 @@ func CaAdd(tableName, commonName, host, protocol, data, caPEM, caPrivyKeyPEM str
 
 func CaInquire(tableName, commonname, host, protocol string) (bool, string, string) {
 	/*
-		Return false if tables/certificates exist; 'generate' if not
-		SqliteMaster Inquire tableName
+		如果表证书存在，则返回 false；如果没有，则“生成”
+		SqliteMaster 查询表名
 	*/
 	tableName = Rename(tableName)
 	commonname = Rename(commonname)
+	var (
+		NUM int64
+	)
 	if db.Select("name").Table("sqlite_master").Where("name = ? AND type = ?", tableName, "table").Scan(&sqliteMaster); sqliteMaster.Name == tableName {
 		// @NUM DATABASE TABLE NAMES CANNOT BE REPEATED
 		Notice("查询数据库 表名:", "["+tableName+"] 存在!")
-		var NUM int64
 
 		if db.Select("*").Table(tableName).Where("common_name = ? AND host = ? AND protocol = ?", commonname, host, protocol).Count(&NUM).Scan(&certs); certs.CommonName == commonname && certs.ID != 0 {
 			// SELECT COUNT(*) AS "NUM",* FROM 'GTS_Root_R1' WHERE common_name='GTS_CA_1C3' AND host='localhost' AND protocol='x509';
