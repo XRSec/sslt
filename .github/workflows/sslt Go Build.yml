@@ -43,7 +43,7 @@ jobs:
           v: false
           x: false
           race: false
-          ldflags: -s -w -X main.buildTime=${{ steps.time.outputs.dir }} -X main.version=${{ github.event.inputs.tagName }} -X main.commitId=${{ steps.commitId.outputs.dir }} -X main.author=XRSec
+          ldflags: -s -w -X main.buildTime=${{ steps.time.outputs.dir }} -X main.versionData=${{ github.event.inputs.tagName }} -X main.commitId=${{ steps.commitId.outputs.dir }} -X main.author=XRSec
           buildmode: default
       -
         name: Delete old Releases
