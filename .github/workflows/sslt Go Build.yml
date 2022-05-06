@@ -46,14 +46,6 @@ jobs:
           ldflags: -s -w -X main.buildTime=${{ steps.time.outputs.dir }} -X main.versionData=${{ github.event.inputs.tagName }} -X main.commitId=${{ steps.commitId.outputs.dir }} -X main.author=XRSec
           buildmode: default
       -
-        name: Run UPX
-        uses: crazy-max/ghaction-upx@v1
-        with:
-          version: latest
-          files: |
-            bin/*
-          args: -fq
-      -
         name: Delete old Releases
         uses: dev-drprasad/delete-older-releases@v0.2.0
         with:
