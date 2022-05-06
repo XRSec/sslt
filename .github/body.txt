@@ -1,71 +1,80 @@
 ## Update
+
 - fix mac arm64
 - fix linux
 - add windows
 
-## ☂️ How to use
-
-### 0x01
-
-```bash
-./sslt -c US -h="test.com 1.1.1.1 localhost" -sc="This is DNS"
-```
-
-### 0x02
-
-```bash
-./sslt -r=ca.pem  -rk=/home/ca.key.pem
-```
-
-### 0x03
-
-```bash
-./sslt -c US -h 1.1.1.1 -sc "证书的名字，方便记忆"
-```
-
-### 0x05
-
-```bash
-
-./sslt -c US -h test.com -rc "Root CommonName" -ro "Root OrganizationName" -sc "Server CommonName" -so "Server OrganizationName"
-```
-
-### help
-
-```bash
+<details>
+  <summary>☂️ How to use</summary>
+  <!-- <p> -->
+  <b>Help</b>
+  <pre><code>
 ➜  ~ ./sslt -help
- -------------------------------
-   _____   _____  .      _______
-  (       (      /     '   /
-   `--.    `--.  |         |
-      |       |  |         |
- \___.'  \___.'  /---/     /
- ----------------------
+-------------------------------
+_____   _____  .      _______
+(       (      /     '   /   
+`--.    `--.  |         |   
+    |       |  |         |   
+\___.'  \___.'  /---/     /   
+----------------------     
 Usage of sslt:
-  -c string
+-api
+        sslt api
+-c string
         Specified Country (default "US")
-  -h string
-        Specified domain name (default "localhost")
-  -help
+-h    Display help information
+-help
         Display help information
-  -p string
+-host string
+        Specified domain name (default "localhost")
+-p string
         Specified encryption protocol (default "rsa")
-  -r string
-        Import CA (default "default")
-  -rc string
+-r string
+        Import CA (default "sslt/ca.pem")
+-rc string
         Specified Root CommonName (default "GTS Root R1")
-  -rk string
-        Import CA Key (default "default")
-  -ro string
+-rk string
+        Import CA Key (default "sslt/ca.key.pe")
+-rlc string
+        Specified Root Locality
+-rna string
+        Specified Root NotAfter
+-ro string
         Specified Root Organization (default "Google Trust Services LLC")
-  -s string
-        Import Server (default "default")
-  -sc string
+-rou string
+        Specified Root OrganizationalUnit
+-rpc string
+        Specified Root PostalCode
+-rpr string
+        Specified Root Province
+-rsn string
+        Specified Root SerialNumber
+-rst string
+        Specified Root StreetAddress
+-s string
+        Import Cert CA (default "sslt/server.pem")
+-sc string
         Specified Server CommonName (default "GTS CA 1C3")
-  -sk string
-        Import Server Key (default "default")
-  -so string
+-sk string
+        Import Cert CA Key (default "sslt/server.key.pe")
+-slc string
+        Specified Server Locality
+-sna string
+        Specified Server NotAfter
+-so string
         Specified Server Organization (default "Google Trust Services LLC")
-  -v    sslt version
- -------------------------------
-```
+-sou string
+        Specified Server OrganizationalUnit
+-spc string
+        Specified Server PostalCode
+-spr string
+        Specified Server Province
+-ssn string
+        Specified Server SerialNumber
+-sst string
+        Specified Server StreetAddress
+-v    sslt version
+-------------------------------
+    </code></pre>
+  </p>
+</details>
