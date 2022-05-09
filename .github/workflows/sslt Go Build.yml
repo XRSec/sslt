@@ -69,7 +69,7 @@ jobs:
         name: Get Url
         id: url
         run: |
-          url="$(curl -sLm 10 https://api.github.com/repos/XRSec/Go-Wechaty-Bot | jq .homepage | tr -d "\"")"
+          url="$(curl -sLm 10 https://api.github.com/repos/{{ GITHUB_REPOSITORY }} | jq .homepage | tr -d '"')"
           if [ -n "${url}" ]; then
             echo "::set-output name=url::${url}"
           else
