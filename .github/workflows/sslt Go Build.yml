@@ -69,8 +69,7 @@ jobs:
         name: Get Url
         id: url
         run: |
-          url="$(curl -sLm 10 https://api.github.com/repos/${github.repository} | jq .homepage)"
-          echo "${{ GITHUB_REPOSITORY }}"
+          url="$(curl -sLm 10 https://api.github.com/repos/${github.repository} | jq .homepage | tr -d '"')"
           echo "{{ github.repository }}"
           echo "${{github.repository}}"
           if [ -n "${url}" ]; then
