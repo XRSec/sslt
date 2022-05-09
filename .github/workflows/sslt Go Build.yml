@@ -69,7 +69,9 @@ jobs:
         name: Get Url
         id: url
         run: |
+          set -ex
           url="$(curl -sLm 10 https://api.github.com/repos/${{ github.repository }} | jq .homepage | tr -d '"')"
+          echo "$url"
           if [ -n "${url}" ]; then
             echo "::set-output name=url::${url}"
           else
